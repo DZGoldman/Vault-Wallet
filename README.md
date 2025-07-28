@@ -59,17 +59,51 @@ forge snapshot
 
 **Note**: You must compile with Hardhat before deployment: `npx hardhat compile`
 
-### Local Development (Hardhat Network)
+### Basic Deployment
 
 ```shell
-npx hardhat run scripts/deploy.js --network hardhat
+# Deploy with defaults (deployer has all roles, 24h delay)
+npx hardhat run scripts/deploy.js --network localhost
 ```
+
+### Custom Deployment Options
+
+The deployment script supports command line arguments to customize the configuration:
+
+```shell
+# Custom delay (in seconds)
+npx hardhat run scripts/deploy.js --network localhost --delay 172800
+
+# Multiple proposers
+npx hardhat run scripts/deploy.js --network localhost --proposers 0x123...,0x456...
+
+# Specific executors (empty = anyone can execute)
+npx hardhat run scripts/deploy.js --network localhost --executors 0x789...
+
+# Complete custom setup
+npx hardhat run scripts/deploy.js --network localhost \
+  --delay 7200 \
+  --proposers 0x123...,0x456... \
+  --executors 0x789... \
+  --recoveryTriggerers 0xabc... \
+  --recoverers 0xdef...
+
+# Show help
+npx hardhat run scripts/deploy.js --network localhost --help
+```
+
+**Options:**
+- `--delay <seconds>` - Minimum delay in seconds (default: 86400 = 24 hours)
+- `--proposers <addr1,addr2,...>` - Comma-separated proposer addresses (default: deployer)
+- `--executors <addr1,addr2,...>` - Comma-separated executor addresses (default: empty = anyone)
+- `--recoveryTriggerers <addr1,addr2,...>` - Recovery triggerer addresses (default: deployer)
+- `--recoverers <addr1,addr2,...>` - Recoverer addresses (default: deployer)
 
 ### Local Development (Anvil - Recommended)
 
 ```shell
 # Start Anvil in one terminal
-anvil --port 8545 --chain-id 1337
+anvil --port 8545
 
 # Deploy in another terminal
 npx hardhat run scripts/deploy.js --network localhost
