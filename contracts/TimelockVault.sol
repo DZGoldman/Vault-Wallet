@@ -20,6 +20,10 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
     address public currentProposer;
     address public currentRecoveryTriggerer;
     
+    // Epoch-based global cancellation
+    uint256 public currentRecoveryEpoch;
+    mapping(bytes32 => uint256) private _operationEpochs;
+    
     // Modifiers
     modifier whenNotInRecoveryMode() {
         require(!recoveryMode, "TimelockVault: Cannot perform operation in recovery mode");
@@ -32,7 +36,7 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
     }
     
     // Events
-    event RecoveryModeTriggered(address indexed triggerer);
+    event RecoveryModeTriggered(address indexed triggerer, uint256 newEpoch);
     event RecoveryModeExited(address indexed recoverer, address indexed newProposer, address indexed newTriggerer);
     event OperationCancelled(bytes32 indexed id, address indexed canceller);
     
@@ -65,17 +69,23 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
     }
     
     /**
-     * @dev Triggers recovery mode. Only callable by RECOVERY_TRIGGER_ROLE.
+     * @dev Triggers recovery mode and cancels all pending operations globally.
+     * Only callable by RECOVERY_TRIGGER_ROLE.
      * In recovery mode, no operations can be scheduled or executed.
+     * All operations from previous epochs become invalid.
      */
     function triggerRecoveryMode() external onlyRole(RECOVERY_TRIGGER_ROLE) whenNotInRecoveryMode {
         recoveryMode = true;
-        emit RecoveryModeTriggered(msg.sender);
+        
+        // Increment epoch - this invalidates ALL pending operations from previous epochs
+        currentRecoveryEpoch++;
+        
+        emit RecoveryModeTriggered(msg.sender, currentRecoveryEpoch);
     }
     
     /**
-     * @dev Exits recovery mode and resets proposer and recovery triggerer roles.
-     * Only callable by RECOVERER_ROLE when in recovery mode.
+     * @dev Exits recovery mode and resets roles. Operations scheduled before recovery
+     * remain globally cancelled. New operations will use the new epoch.
      * @param newProposer New proposer address
      * @param newTriggerer New recovery triggerer address
      */
@@ -98,14 +108,47 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
         currentProposer = newProposer;
         currentRecoveryTriggerer = newTriggerer;
         
-        // Exit recovery mode
+        // Exit recovery mode (epoch remains incremented - old operations stay cancelled)
         recoveryMode = false;
         
         emit RecoveryModeExited(msg.sender, newProposer, newTriggerer);
     }
+
+     function getOperationState(bytes32 id) public override view virtual returns (OperationState) {
+
+        if (isOperationGloballyCancelled(id)) {
+            return OperationState.Unset;
+        }
+        return super.getOperationState(id);
+
+    }
+
+
+    /**
+     * @dev Get the epoch when an operation was scheduled
+     */
+    function getOperationEpoch(bytes32 id) public view returns (uint256) {
+        return _operationEpochs[id];
+    }
+
+    /**
+     * @dev Check if an operation was globally cancelled (from old epoch)
+     */
+    function isOperationGloballyCancelled(bytes32 id) public view returns (bool) {
+        return _operationEpochs[id] != 0 && _operationEpochs[id] < currentRecoveryEpoch;
+    }
+
+    /**
+     * @dev Clean up globally cancelled operation storage (anyone can call)
+     * Saves gas by cleaning up old epoch data
+     */
+    function cleanupGloballyCancelledOperation(bytes32 id) external {
+        require(isOperationGloballyCancelled(id), "TimelockVault: Operation not globally cancelled");
+        delete _operationEpochs[id];
+    }
     
     /**
-     * @dev Override schedule function to prevent scheduling in recovery mode
+     * @dev Override schedule function with epoch tracking and prevent scheduling in recovery mode
      */
     function schedule(
         address target,
@@ -115,11 +158,16 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
         bytes32 salt,
         uint256 delay
     ) public override onlyRole(PROPOSER_ROLE) whenNotInRecoveryMode {
+        bytes32 id = hashOperation(target, value, data, predecessor, salt);
+        
+        // Tag operation with current epoch
+        _operationEpochs[id] = currentRecoveryEpoch;
+        
         super.schedule(target, value, data, predecessor, salt, delay);
     }
     
     /**
-     * @dev Override scheduleBatch function to prevent scheduling in recovery mode
+     * @dev Override scheduleBatch function with epoch tracking and prevent scheduling in recovery mode
      */
     function scheduleBatch(
         address[] calldata targets,
@@ -129,11 +177,16 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
         bytes32 salt,
         uint256 delay
     ) public override onlyRole(PROPOSER_ROLE) whenNotInRecoveryMode {
+        bytes32 id = hashOperationBatch(targets, values, payloads, predecessor, salt);
+        
+        // Tag batch operation with current epoch
+        _operationEpochs[id] = currentRecoveryEpoch;
+        
         super.scheduleBatch(targets, values, payloads, predecessor, salt, delay);
     }
     
     /**
-     * @dev Override execute function to prevent execution in recovery mode
+     * @dev Override execute function with epoch validation and prevent execution in recovery mode
      */
     function execute(
         address target,
@@ -142,11 +195,16 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
         bytes32 predecessor,
         bytes32 salt
     ) public payable override whenNotInRecoveryMode {
+        bytes32 id = hashOperation(target, value, data, predecessor, salt);
+        
         super.execute(target, value, data, predecessor, salt);
+        
+        // Clean up epoch tracking after successful execution
+        delete _operationEpochs[id];
     }
     
     /**
-     * @dev Override executeBatch function to prevent execution in recovery mode
+     * @dev Override executeBatch function with epoch validation and prevent execution in recovery mode
      */
     function executeBatch(
         address[] calldata targets,
@@ -155,17 +213,26 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
         bytes32 predecessor,
         bytes32 salt
     ) public payable override whenNotInRecoveryMode {
+        bytes32 id = hashOperationBatch(targets, values, payloads, predecessor, salt);
+        
         super.executeBatch(targets, values, payloads, predecessor, salt);
+        
+        // Clean up epoch tracking after successful execution
+        delete _operationEpochs[id];
     }
     
     /**
      * @dev Override cancel function to allow cancellation by proposers or recovery triggerer
+     * and clean up epoch tracking
      */
     function cancel(bytes32 id) public override {
         require(
             hasRole(PROPOSER_ROLE, msg.sender) || hasRole(RECOVERY_TRIGGER_ROLE, msg.sender),
             "TimelockVault: Caller is not proposer or recovery triggerer"
         );
+        // Clean up epoch tracking
+        delete _operationEpochs[id];
+        
         super.cancel(id);
         emit OperationCancelled(id, msg.sender);
     }
