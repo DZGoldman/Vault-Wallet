@@ -69,6 +69,7 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
     ) TimelockController(minDelay, proposers, executors, address(0)) {
 
         // Vault is set as default admin for all roles in TimelockController; i.e., roles can change via timelock.
+        // TimelockController also sets executors, proposers, and cancellors (to be the initial proposers).
 
         // Grant recovery trigger roles
         for (uint256 i = 0; i < recoveryTriggerers.length; ++i) {
@@ -241,6 +242,6 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
         delete _operationEpochs[id];
     }
     
-    
+
 
 } 
