@@ -11,6 +11,13 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
  * Inherits from OpenZeppelin's TimelockController and adds recovery mode features.
  */
 contract TimelockVault is TimelockController, ReentrancyGuard {
+    // Custom errors
+    error CannotPerformOperationInRecoveryMode();
+    error NotInRecoveryMode();
+    error CallerIsNotRecoverer(address caller);
+    error OperationNotGloballyCancelled(bytes32 operationId, uint256 operationEpoch, uint256 currentEpoch);
+    error CallerNotAuthorizedToCancel(address caller, bytes32 operationId);
+    
     // Role definitions
     bytes32 public constant RECOVERY_TRIGGER_ROLE = keccak256("RECOVERY_TRIGGER_ROLE");
     bytes32 public constant RECOVERER_ROLE = keccak256("RECOVERER_ROLE");
@@ -24,18 +31,18 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
     
     // Modifiers
     modifier whenNotInRecoveryMode() {
-        require(!recoveryMode, "TimelockVault: Cannot perform operation in recovery mode");
+        if (recoveryMode) revert CannotPerformOperationInRecoveryMode();
         _;
     }
     
     modifier whenInRecoveryMode() {
-        require(recoveryMode, "TimelockVault: Not in recovery mode");
+        if (!recoveryMode) revert NotInRecoveryMode();
         _;
     }
     
     modifier onlyRecovererInRecoveryMode() {
-        require(recoveryMode, "TimelockVault: Not in recovery mode");
-        require(hasRole(RECOVERER_ROLE, msg.sender), "TimelockVault: Caller is not recoverer");
+        if (!recoveryMode) revert NotInRecoveryMode();
+        if (!hasRole(RECOVERER_ROLE, msg.sender)) revert CallerIsNotRecoverer(msg.sender);
         _;
     }
     
@@ -149,7 +156,9 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
      * Saves gas by cleaning up old epoch data
      */
     function cleanupGloballyCancelledOperation(bytes32 id) external {
-        require(isOperationGloballyCancelled(id), "TimelockVault: Operation not globally cancelled");
+        if (!isOperationGloballyCancelled(id)) {
+            revert OperationNotGloballyCancelled(id, _operationEpochs[id], currentRecoveryEpoch);
+        }
         delete _operationEpochs[id];
     }
     
