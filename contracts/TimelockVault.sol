@@ -75,32 +75,36 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
     }
     
     /**
+     * @dev Internal function to set role admins for all timelock roles
+     * @param roleAdmin The role to set as admin for all timelock roles
+     */
+    function _setTimelockRoleAdmins(bytes32 roleAdmin) internal {
+        _setRoleAdmin(PROPOSER_ROLE, roleAdmin);
+        _setRoleAdmin(RECOVERY_TRIGGER_ROLE, roleAdmin);
+        _setRoleAdmin(EXECUTOR_ROLE, roleAdmin);
+        _setRoleAdmin(CANCELLER_ROLE, roleAdmin);
+    }
+    
+    /**
      * @dev Triggers recovery mode. Only callable by RECOVERY_TRIGGER_ROLE.
      * In recovery mode, no operations can be scheduled or executed.
      */
     function triggerRecoveryMode() external onlyRole(RECOVERY_TRIGGER_ROLE) whenNotInRecoveryMode {
         recoveryMode = true;
-        // Set RECOVERER_ROLE as the role admin for PROPOSER_ROLE and RECOVERY_TRIGGER_ROLE
-        _setRoleAdmin(PROPOSER_ROLE, RECOVERER_ROLE);
-        _setRoleAdmin(RECOVERY_TRIGGER_ROLE, RECOVERER_ROLE);
-        _setRoleAdmin(EXECUTOR_ROLE, RECOVERER_ROLE);
-        _setRoleAdmin(CANCELLER_ROLE, RECOVERER_ROLE);
-
-
+        // Set RECOVERER_ROLE as the role admin for all timelock roles
+        _setTimelockRoleAdmins(RECOVERER_ROLE);
         
         emit RecoveryModeTriggered(msg.sender, currentRecoveryEpoch);
     }
+    
     /**
      * @dev Exits recovery mode. Only flips the recovery mode flag.
      * Role management should be done separately through AccessControl functions.
      */
     function exitRecoveryMode() external onlyRecovererInRecoveryMode {
         recoveryMode = false;
-        // Set vault as the role admin for PROPOSER_ROLE and RECOVERY_TRIGGER_ROLE
-        _setRoleAdmin(PROPOSER_ROLE, DEFAULT_ADMIN_ROLE);
-        _setRoleAdmin(RECOVERY_TRIGGER_ROLE, DEFAULT_ADMIN_ROLE);
-        _setRoleAdmin(EXECUTOR_ROLE, DEFAULT_ADMIN_ROLE);
-        _setRoleAdmin(CANCELLER_ROLE, DEFAULT_ADMIN_ROLE);
+        // Set vault as the role admin for all timelock roles
+        _setTimelockRoleAdmins(DEFAULT_ADMIN_ROLE);
 
         emit RecoveryModeExited(msg.sender, currentRecoveryEpoch);
     }
