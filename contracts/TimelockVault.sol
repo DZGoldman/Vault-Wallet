@@ -105,8 +105,9 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
     }
     
     /**
-     * @dev Exits recovery mode. Only flips the recovery mode flag.
-     * Role management should be done separately through AccessControl functions.
+     * @dev Exits recovery mode and restores normal role admin structure.
+     * Only callable by RECOVERER_ROLE when in recovery mode.
+     * Reverts role admins back to DEFAULT_ADMIN_ROLE (the vault itself).
      */
     function exitRecoveryMode() external onlyRecovererInRecoveryMode {
         recoveryMode = false;
@@ -128,7 +129,11 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
         emit AllOperationsCancelled(currentRecoveryEpoch, msg.sender);
     }
     
-
+    /**
+     * @dev Override getOperationState to handle globally cancelled operations
+     * @param id The operation ID to check
+     * @return The operation state (Unset if globally cancelled, otherwise from parent)
+     */
      function getOperationState(bytes32 id) public override view virtual returns (OperationState) {
         if (isOperationGloballyCancelled(id)) {
             return OperationState.Unset;
@@ -201,7 +206,7 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
     }
     
     /**
-     * @dev Override execute function with epoch validation and prevent execution in recovery mode
+     * @dev Override execute function with epoch cleanup and prevent execution in recovery mode
      */
     function execute(
         address target,
@@ -219,7 +224,7 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
     }
     
     /**
-     * @dev Override executeBatch function with epoch validation and prevent execution in recovery mode
+     * @dev Override executeBatch function with epoch cleanup and prevent execution in recovery mode
      */
     function executeBatch(
         address[] calldata targets,
@@ -235,6 +240,7 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
         // Clean up epoch tracking after successful execution
         delete _operationEpochs[id];
     }
+    
     
 
 } 
