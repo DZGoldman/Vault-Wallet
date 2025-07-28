@@ -15,7 +15,6 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
     error CannotPerformOperationInRecoveryMode();
     error NotInRecoveryMode();
     error CallerIsNotRecoverer(address caller);
-    error OperationNotGloballyCancelled(bytes32 operationId, uint256 operationEpoch, uint256 currentEpoch);
     error CallerNotAuthorizedToCancel(address caller, bytes32 operationId);
     
     // Role definitions
@@ -136,38 +135,36 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
      * @return The operation state (Unset if globally cancelled, otherwise from parent)
      */
      function getOperationState(bytes32 id) public override view virtual returns (OperationState) {
-        if (isOperationGloballyCancelled(id)) {
+        // First check the parent state
+        OperationState parentState = super.getOperationState(id);
+        
+        // If the operation is done or unset in parent, always trust the parent
+        // This preserves executed operations and individually cancelled operations
+        if (parentState == OperationState.Done || parentState == OperationState.Unset) {
+            return parentState;
+        }
+        
+        // For waiting/ready operations, check if they're from a previous epoch (globally cancelled)
+        if (_operationEpochs[id] < currentRecoveryEpoch) {
             return OperationState.Unset;
         }
-        return super.getOperationState(id);
+        
+        // Operation is from current epoch and pending, return parent state
+        return parentState;
 
     }
 
     /**
      * @dev Get the epoch when an operation was scheduled
+     * @param id The operation ID to check
+     * @return The epoch number (0 if never scheduled, ≥1 if scheduled)
      */
     function getOperationEpoch(bytes32 id) public view returns (uint256) {
         return _operationEpochs[id];
     }
 
-    /**
-     * @dev Check if an operation was globally cancelled (from old epoch)
-     */
-    function isOperationGloballyCancelled(bytes32 id) public view returns (bool) {
-        return  _operationEpochs[id] < currentRecoveryEpoch;
-    }
 
-    /**
-     * @dev Clean up globally cancelled operation storage (anyone can call)
-     * Saves gas by cleaning up old epoch data
-     */
-    function cleanupGloballyCancelledOperation(bytes32 id) external {
-        if (!isOperationGloballyCancelled(id)) {
-            revert OperationNotGloballyCancelled(id, _operationEpochs[id], currentRecoveryEpoch);
-        }
-        delete _operationEpochs[id];
-    }
-    
+
     /**
      * @dev Override schedule function with epoch tracking and prevent scheduling in recovery mode
      */
@@ -207,7 +204,8 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
     }
     
     /**
-     * @dev Override execute function with epoch cleanup and prevent execution in recovery mode
+     * @dev Override execute function and prevent execution in recovery mode
+     * Note: Epoch tracking is preserved permanently (no cleanup after execution)
      */
     function execute(
         address target,
@@ -216,16 +214,12 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
         bytes32 predecessor,
         bytes32 salt
     ) public payable override whenNotInRecoveryMode {
-        bytes32 id = hashOperation(target, value, data, predecessor, salt);
-
         super.execute(target, value, data, predecessor, salt);
-        
-        // Clean up epoch tracking after successful execution
-        delete _operationEpochs[id];
     }
     
     /**
-     * @dev Override executeBatch function with epoch cleanup and prevent execution in recovery mode
+     * @dev Override executeBatch function and prevent execution in recovery mode  
+     * Note: Epoch tracking is preserved permanently (no cleanup after execution)
      */
     function executeBatch(
         address[] calldata targets,
@@ -234,12 +228,7 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
         bytes32 predecessor,
         bytes32 salt
     ) public payable override whenNotInRecoveryMode {
-        bytes32 id = hashOperationBatch(targets, values, payloads, predecessor, salt);
-        
         super.executeBatch(targets, values, payloads, predecessor, salt);
-        
-        // Clean up epoch tracking after successful execution
-        delete _operationEpochs[id];
     }
     
 
