@@ -17,11 +17,9 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
     
     // State variables
     bool public recoveryMode;
-    address public currentProposer;
-    address public currentRecoveryTriggerer;
     
     // Epoch-based global cancellation
-    uint256 public currentRecoveryEpoch;
+    uint256 public currentRecoveryEpoch = 1; // Start at 1 to avoid epoch 0 issues
     mapping(bytes32 => uint256) private _operationEpochs;
     
     // Modifiers
@@ -35,94 +33,98 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
         _;
     }
     
+    modifier onlyRecovererInRecoveryMode() {
+        require(recoveryMode, "TimelockVault: Not in recovery mode");
+        require(hasRole(RECOVERER_ROLE, msg.sender), "TimelockVault: Caller is not recoverer");
+        _;
+    }
+    
     // Events
-    event RecoveryModeTriggered(address indexed triggerer, uint256 newEpoch);
-    event RecoveryModeExited(address indexed recoverer, address indexed newProposer, address indexed newTriggerer);
+    event RecoveryModeTriggered(address indexed triggerer, uint256 currentEpoch);
+    event RecoveryModeExited(address indexed recoverer, uint256 currentEpoch);
     event OperationCancelled(bytes32 indexed id, address indexed canceller);
+    event AllOperationsCancelled(uint256 newEpoch, address indexed canceller);
     
     /**
      * @dev Constructor initializes the timelock with specified roles
      * @param minDelay Minimum delay for operations
      * @param proposers Array of proposer addresses
      * @param executors Array of executor addresses (empty array means anyone can execute)
-     * @param recoveryTriggerer Initial recovery triggerer address
-     * @param recoverer Initial recoverer address
+     * @param recoveryTriggerers Array of recovery triggerer addresses
+     * @param recoverers Array of recoverer addresses
      */
     constructor(
         uint256 minDelay,
         address[] memory proposers,
         address[] memory executors,
-        address recoveryTriggerer,
-        address recoverer
+        address[] memory recoveryTriggerers,
+        address[] memory recoverers
     ) TimelockController(minDelay, proposers, executors, address(0)) {
-        // Grant recovery roles
-        _grantRole(RECOVERY_TRIGGER_ROLE, recoveryTriggerer);
-        _grantRole(RECOVERER_ROLE, recoverer);
-        
- 
 
-        
-        // Store initial roles for recovery mode exit
-        require(proposers.length == 1, "TimelockVault: There must be exactly one proposer");
-        currentProposer = proposers[0]; // Assuming single proposer for simplicity
-        currentRecoveryTriggerer = recoveryTriggerer;
+        // Vault is set as default admin for all roles in TimelockController; i.e., roles can change via timelock.
+
+        // Grant recovery trigger roles
+        for (uint256 i = 0; i < recoveryTriggerers.length; ++i) {
+            _grantRole(RECOVERY_TRIGGER_ROLE, recoveryTriggerers[i]);
+        }
+
+        // Grant recoverer roles
+        for (uint256 i = 0; i < recoverers.length; ++i) {
+            _grantRole(RECOVERER_ROLE, recoverers[i]);
+        }
     }
     
     /**
-     * @dev Triggers recovery mode and cancels all pending operations globally.
-     * Only callable by RECOVERY_TRIGGER_ROLE.
+     * @dev Triggers recovery mode. Only callable by RECOVERY_TRIGGER_ROLE.
      * In recovery mode, no operations can be scheduled or executed.
-     * All operations from previous epochs become invalid.
      */
     function triggerRecoveryMode() external onlyRole(RECOVERY_TRIGGER_ROLE) whenNotInRecoveryMode {
         recoveryMode = true;
-        
-        // Increment epoch - this invalidates ALL pending operations from previous epochs
-        currentRecoveryEpoch++;
+        // Set RECOVERER_ROLE as the role admin for PROPOSER_ROLE and RECOVERY_TRIGGER_ROLE
+        _setRoleAdmin(PROPOSER_ROLE, RECOVERER_ROLE);
+        _setRoleAdmin(RECOVERY_TRIGGER_ROLE, RECOVERER_ROLE);
+        _setRoleAdmin(EXECUTOR_ROLE, RECOVERER_ROLE);
+        _setRoleAdmin(CANCELLER_ROLE, RECOVERER_ROLE);
+
+
         
         emit RecoveryModeTriggered(msg.sender, currentRecoveryEpoch);
     }
+    /**
+     * @dev Exits recovery mode. Only flips the recovery mode flag.
+     * Role management should be done separately through AccessControl functions.
+     */
+    function exitRecoveryMode() external onlyRecovererInRecoveryMode {
+        recoveryMode = false;
+        // Set vault as the role admin for PROPOSER_ROLE and RECOVERY_TRIGGER_ROLE
+        _setRoleAdmin(PROPOSER_ROLE, DEFAULT_ADMIN_ROLE);
+        _setRoleAdmin(RECOVERY_TRIGGER_ROLE, DEFAULT_ADMIN_ROLE);
+        _setRoleAdmin(EXECUTOR_ROLE, DEFAULT_ADMIN_ROLE);
+        _setRoleAdmin(CANCELLER_ROLE, DEFAULT_ADMIN_ROLE);
+
+        emit RecoveryModeExited(msg.sender, currentRecoveryEpoch);
+    }
     
     /**
-     * @dev Exits recovery mode and resets roles. Operations scheduled before recovery
-     * remain globally cancelled. New operations will use the new epoch.
-     * @param newProposer New proposer address
-     * @param newTriggerer New recovery triggerer address
+     * @dev Cancels all pending operations globally by incrementing the recovery epoch.
+     * Only callable by RECOVERER_ROLE when in recovery mode.
+     * All operations from previous epochs become invalid.
      */
-    function exitRecoveryMode(
-        address newProposer,
-        address newTriggerer
-    ) external onlyRole(RECOVERER_ROLE) whenInRecoveryMode nonReentrant {
-        require(newProposer != address(0), "TimelockVault: Invalid new proposer");
-        require(newTriggerer != address(0), "TimelockVault: Invalid new triggerer");
+    function cancelAllOperations() external onlyRecovererInRecoveryMode {
+        // Increment epoch - this invalidates ALL pending operations from previous epochs
+        currentRecoveryEpoch++;
         
-        // Reset proposer role - revoke current proposer and grant to new proposer
-        _revokeRole(PROPOSER_ROLE, currentProposer);
-        _grantRole(PROPOSER_ROLE, newProposer);
-        
-        // Reset recovery triggerer role - revoke current triggerer and grant to new triggerer
-        _revokeRole(RECOVERY_TRIGGER_ROLE, currentRecoveryTriggerer);
-        _grantRole(RECOVERY_TRIGGER_ROLE, newTriggerer);
-        
-        // Update stored roles
-        currentProposer = newProposer;
-        currentRecoveryTriggerer = newTriggerer;
-        
-        // Exit recovery mode (epoch remains incremented - old operations stay cancelled)
-        recoveryMode = false;
-        
-        emit RecoveryModeExited(msg.sender, newProposer, newTriggerer);
+        emit AllOperationsCancelled(currentRecoveryEpoch, msg.sender);
     }
+    
 
      function getOperationState(bytes32 id) public override view virtual returns (OperationState) {
-
         if (isOperationGloballyCancelled(id)) {
             return OperationState.Unset;
         }
         return super.getOperationState(id);
 
     }
-
 
     /**
      * @dev Get the epoch when an operation was scheduled
@@ -135,7 +137,7 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
      * @dev Check if an operation was globally cancelled (from old epoch)
      */
     function isOperationGloballyCancelled(bytes32 id) public view returns (bool) {
-        return _operationEpochs[id] != 0 && _operationEpochs[id] < currentRecoveryEpoch;
+        return  _operationEpochs[id] < currentRecoveryEpoch;
     }
 
     /**
@@ -196,7 +198,7 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
         bytes32 salt
     ) public payable override whenNotInRecoveryMode {
         bytes32 id = hashOperation(target, value, data, predecessor, salt);
-        
+
         super.execute(target, value, data, predecessor, salt);
         
         // Clean up epoch tracking after successful execution
@@ -219,22 +221,6 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
         
         // Clean up epoch tracking after successful execution
         delete _operationEpochs[id];
-    }
-    
-    /**
-     * @dev Override cancel function to allow cancellation by proposers or recovery triggerer
-     * and clean up epoch tracking
-     */
-    function cancel(bytes32 id) public override {
-        require(
-            hasRole(PROPOSER_ROLE, msg.sender) || hasRole(RECOVERY_TRIGGER_ROLE, msg.sender),
-            "TimelockVault: Caller is not proposer or recovery triggerer"
-        );
-        // Clean up epoch tracking
-        delete _operationEpochs[id];
-        
-        super.cancel(id);
-        emit OperationCancelled(id, msg.sender);
     }
     
 
