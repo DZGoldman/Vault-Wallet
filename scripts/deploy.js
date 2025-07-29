@@ -71,7 +71,7 @@ async function main() {
   // Configuration with command line overrides
   const minDelay = options.delay ? parseInt(options.delay) : 86400; // 24 hours in seconds
   const proposers = options.proposers && options.proposers.length > 0 ? options.proposers : [deployer.address];
-  const executors = options.executors || []; // Empty array means anyone can execute
+  const executors = options.executors || ["0x0000000000000000000000000000000000000000"]; // Empty array means anyone can execute
   const recoveryTriggerers = options.recoveryTriggerers && options.recoveryTriggerers.length > 0 ? options.recoveryTriggerers : [deployer.address];
   const recoverers = options.recoverers && options.recoverers.length > 0 ? options.recoverers : [deployer.address];
 
@@ -107,8 +107,10 @@ async function main() {
   );
 
   await timelockVault.waitForDeployment();
-
+  console.log('-------------------------------');
   console.log("TimelockVault deployed to:", await timelockVault.getAddress());
+  console.log('-------------------------------');
+
   console.log("Recovery mode:", await timelockVault.recoveryMode());
   console.log("Current recovery epoch:", await timelockVault.currentRecoveryEpoch());
   

@@ -4,149 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TimelockVault Interface</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-        
-        .container {
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            padding: 30px;
-            margin-bottom: 20px;
-        }
-        
-        h1 {
-            color: #333;
-            margin-bottom: 30px;
-            text-align: center;
-        }
-        
-        h2 {
-            color: #444;
-            border-bottom: 2px solid #007bff;
-            padding-bottom: 10px;
-            margin-bottom: 20px;
-        }
-        
-        .roles-section {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-        
-        .role-group {
-            background: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 6px;
-            padding: 20px;
-        }
-        
-        .role-title {
-            font-weight: bold;
-            color: #495057;
-            margin-bottom: 10px;
-            font-size: 1.1em;
-        }
-        
-        .address-list {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-        
-        .address-item {
-            background: white;
-            border: 1px solid #e9ecef;
-            border-radius: 4px;
-            padding: 10px;
-            margin-bottom: 8px;
-            font-family: 'Courier New', monospace;
-            font-size: 0.9em;
-            word-break: break-all;
-        }
-        
-        .loading {
-            text-align: center;
-            color: #6c757d;
-            font-style: italic;
-        }
-        
-        .error {
-            background-color: #f8d7da;
-            border: 1px solid #f5c6cb;
-            color: #721c24;
-            padding: 10px;
-            border-radius: 4px;
-            margin-bottom: 20px;
-        }
-        
-        .status-info {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-        
-        .status-item {
-            background: #e7f3ff;
-            border: 1px solid #b8daff;
-            border-radius: 4px;
-            padding: 15px;
-            text-align: center;
-        }
-        
-        .status-label {
-            font-size: 0.9em;
-            color: #495057;
-            margin-bottom: 5px;
-        }
-        
-        .status-value {
-            font-weight: bold;
-            font-size: 1.1em;
-            color: #007bff;
-        }
-        
-        .connect-button {
-            background-color: #007bff;
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 1em;
-            margin: 10px 0;
-        }
-        
-        .connect-button:hover {
-            background-color: #0056b3;
-        }
-        
-        .connect-button:disabled {
+    <link rel="stylesheet" href="styles.css">
+        .execute-button:disabled {
             background-color: #6c757d;
             cursor: not-allowed;
-        }
-        
-        .disconnect-button {
-            background-color: #dc3545;
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 1em;
-            margin: 10px 0;
-        }
-        
-        .disconnect-button:hover {
-            background-color: #c82333;
         }
     </style>
 </head>
@@ -179,6 +40,15 @@
                 <div class="status-item">
                     <div class="status-label">Recovery Epoch</div>
                     <div class="status-value" id="recoveryEpoch">-</div>
+                </div>
+            </div>
+            
+            <h2>Contract Balance</h2>
+            
+            <div class="status-info">
+                <div class="status-item">
+                    <div class="status-label">ETH Balance</div>
+                    <div class="status-value" id="contractBalance">Loading...</div>
                 </div>
             </div>
             
@@ -215,6 +85,56 @@
                     <ul class="address-list" id="recoverersList" style="display: none;"></ul>
                 </div>
             </div>
+            
+            <h2>Create Transaction</h2>
+            
+            <div class="transaction-form">
+                <div class="form-group">
+                    <label for="targetAddress">Target Address:</label>
+                    <input type="text" id="targetAddress" placeholder="0x..." class="form-input">
+                </div>
+                
+                <div class="form-group">
+                    <label for="value">Value (ETH):</label>
+                    <input type="number" id="value" placeholder="0.0" step="0.001" class="form-input">
+                </div>
+                
+                <div class="form-group">
+                    <label for="calldata">Call Data (hex):</label>
+                    <textarea id="calldata" placeholder="0x (leave empty for simple transfer)" class="form-textarea"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="salt">Salt (optional):</label>
+                    <input type="text" id="salt" placeholder="Random salt will be generated if empty" class="form-input">
+                </div>
+                
+                <div class="form-group">
+                    <label for="delay">Delay (seconds):</label>
+                    <input type="number" id="delay" placeholder="Will use minimum delay if empty" class="form-input">
+                </div>
+                
+                <button id="proposeTransaction" class="propose-button">Propose Transaction</button>
+                
+                <div id="proposalStatus" class="proposal-status" style="display: none;"></div>
+            </div>
+            
+            <h2>Scheduled Operations</h2>
+            
+            <div class="operations-section">
+                <div class="operations-header">
+                    <button id="refreshOperations" class="refresh-button">Refresh Operations</button>
+                    <div class="operations-count">
+                        <span id="operationsCount">Loading...</span>
+                    </div>
+                </div>
+                
+                <div id="operationsLoading" class="loading">Loading scheduled operations...</div>
+                <div id="operationsList" class="operations-list" style="display: none;"></div>
+                <div id="noOperations" class="no-operations" style="display: none;">
+                    No scheduled operations found.
+                </div>
+            </div>
         </div>
         
         <div id="error-section" style="display: none;">
@@ -223,375 +143,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-    <script>
-        // Wait for ethers to load
-        function waitForEthers() {
-            return new Promise((resolve, reject) => {
-                if (typeof ethers !== 'undefined') {
-                    console.log('Ethers loaded successfully');
-                    resolve();
-                    return;
-                }
-                
-                let attempts = 0;
-                const checkEthers = setInterval(() => {
-                    attempts++;
-                    console.log(`Waiting for ethers.js to load, attempt ${attempts}`);
-                    
-                    if (typeof ethers !== 'undefined') {
-                        console.log('Ethers loaded successfully after waiting');
-                        clearInterval(checkEthers);
-                        resolve();
-                    } else if (attempts >= 20) {
-                        console.error('Failed to load ethers.js after 20 attempts');
-                        clearInterval(checkEthers);
-                        reject(new Error('Failed to load ethers.js'));
-                    }
-                }, 100);
-            });
-        }
-
-        // Contract configuration - you'll need to update these after deployment
-        const CONTRACT_ADDRESS = '0xa513E6E4b8f2a923D98304ec87F64353C4D5C853'; // Update with your deployed contract address
-        const CONTRACT_ABI = [
-            // TimelockController functions we need
-            "function getMinDelay() view returns (uint256)",
-            "function hasRole(bytes32 role, address account) view returns (bool)",
-            "function getRoleAdmin(bytes32 role) view returns (bytes32)",
-            
-            // TimelockVault specific functions
-            "function recoveryMode() view returns (bool)",
-            "function currentRecoveryEpoch() view returns (uint256)",
-            
-            // Role constants
-            "function PROPOSER_ROLE() view returns (bytes32)",
-            "function EXECUTOR_ROLE() view returns (bytes32)",
-            "function CANCELLER_ROLE() view returns (bytes32)",
-            "function RECOVERY_TRIGGER_ROLE() view returns (bytes32)",
-            "function RECOVERER_ROLE() view returns (bytes32)",
-            
-            // Events for role enumeration
-            "event RoleGranted(bytes32 indexed role, address indexed account, address indexed sender)",
-            "event RoleRevoked(bytes32 indexed role, address indexed account, address indexed sender)"
-        ];
-
-        let provider;
-        let contract;
-        
-        // DOM elements
-        const connectButton = document.getElementById('connectWallet');
-        const disconnectButton = document.getElementById('disconnectWallet');
-        const connectionStatus = document.getElementById('connectionStatus');
-        const contractInfo = document.getElementById('contract-info');
-        const errorSection = document.getElementById('error-section');
-        const errorMessage = document.getElementById('errorMessage');
-
-        // Check if wallet is available on page load
-        async function checkWallet() {
-            console.log('Checking wallet...', typeof window.ethereum);
-            
-            if (typeof window.ethereum !== 'undefined') {
-                console.log('MetaMask detected');
-                connectionStatus.textContent = 'Wallet detected - Click to connect';
-                connectButton.textContent = 'Connect Wallet';
-                
-                // Remove any existing event listeners to avoid duplicates
-                connectButton.removeEventListener('click', openMetaMaskInstall);
-                
-                // Check if already connected
-                try {
-                    const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-                    if (accounts.length > 0) {
-                        console.log('Already connected to accounts:', accounts);
-                        // Already connected - connect with current account
-                        await connectWallet();
-                    }
-                } catch (error) {
-                    console.log('Error checking existing connection:', error);
-                }
-            } else {
-                console.log('MetaMask not detected');
-                connectionStatus.textContent = 'No wallet detected - Please install MetaMask';
-                connectButton.textContent = 'Install MetaMask';
-                
-                // Remove the connect wallet listener and add install listener
-                connectButton.removeEventListener('click', connectWallet);
-                connectButton.addEventListener('click', openMetaMaskInstall);
-            }
-        }
-
-        // Function to open MetaMask install page
-        function openMetaMaskInstall() {
-            window.open('https://metamask.io/download/', '_blank');
-        }
-
-        // Connect wallet function
-        async function connectWallet() {
-            try {
-                // First make sure ethers is loaded
-                await waitForEthers();
-                
-                if (typeof window.ethereum === 'undefined') {
-                    showError('MetaMask is not installed. Please install MetaMask to use this interface.');
-                    return;
-                }
-
-                // Request account access
-                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-                
-                if (accounts.length === 0) {
-                    showError('No accounts found. Please make sure MetaMask is unlocked.');
-                    return;
-                }
-
-                provider = new ethers.providers.Web3Provider(window.ethereum);
-                const signer = provider.getSigner();
-                const userAddress = await signer.getAddress();
-                console.log('userAddress', userAddress);
-                console.log('accounts', accounts);
-                
-                
-                
-                contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
-                
-                connectionStatus.textContent = `Connected: ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`;
-                connectButton.style.display = 'none';
-                disconnectButton.style.display = 'inline-block';
-                
-                contractInfo.style.display = 'block';
-                await loadContractData();
-                
-                // Listen for account changes
-                window.ethereum.on('accountsChanged', async (accounts) => {
-                    if (accounts.length === 0) {
-                        // User disconnected
-                        disconnectWallet();
-                    } else {
-                        // User switched accounts - update to new account
-                        console.log('Account changed to:', accounts[0]);
-                        try {
-                            const signer = provider.getSigner();
-                            const newAddress = await signer.getAddress();
-                            connectionStatus.textContent = `Connected: ${newAddress.slice(0, 6)}...${newAddress.slice(-4)}`;
-                            
-                            // Reload contract data for new account
-                            await loadContractData();
-                        } catch (error) {
-                            console.error('Error handling account change:', error);
-                            // If we can't get the new account, disconnect
-                            disconnectWallet();
-                        }
-                    }
-                });
-                
-                // Listen for network changes
-                window.ethereum.on('chainChanged', () => {
-                    location.reload();
-                });
-                
-            } catch (error) {
-                console.error('Connection error:', error);
-                if (error.message.includes('ethers.js')) {
-                    showError('Failed to load required libraries. Please refresh the page.');
-                } else if (error.code === 4001) {
-                    showError('Connection rejected by user.');
-                } else if (error.code === -32002) {
-                    showError('Connection request already pending. Please check MetaMask.');
-                } else {
-                    showError('Failed to connect wallet: ' + error.message);
-                }
-            }
-        }
-
-        // Disconnect wallet function
-        function disconnectWallet() {
-            // Reset UI state
-            provider = null;
-            contract = null;
-            
-            connectionStatus.textContent = 'Wallet detected - Click to connect';
-            connectButton.style.display = 'inline-block';
-            connectButton.textContent = 'Connect Wallet';
-            connectButton.disabled = false;
-            disconnectButton.style.display = 'none';
-            contractInfo.style.display = 'none';
-            
-            // Remove event listeners to prevent memory leaks
-            if (window.ethereum && window.ethereum.removeAllListeners) {
-                window.ethereum.removeAllListeners('accountsChanged');
-                window.ethereum.removeAllListeners('chainChanged');
-            }
-            
-            console.log('Wallet disconnected');
-        }
-
-        // Connect wallet event listener
-        connectButton.addEventListener('click', connectWallet);
-        
-        // Disconnect wallet event listener
-        disconnectButton.addEventListener('click', disconnectWallet);
-
-        async function loadContractData() {
-            try {
-                // Load contract basic info
-                document.getElementById('contractAddress').textContent = CONTRACT_ADDRESS;
-                
-                const minDelay = await contract.getMinDelay();
-                document.getElementById('minDelay').textContent = `${minDelay} seconds (${Math.round(minDelay / 3600)} hours)`;
-                
-                const recoveryMode = await contract.recoveryMode();
-                document.getElementById('recoveryMode').textContent = recoveryMode ? 'Active' : 'Inactive';
-                
-                const recoveryEpoch = await contract.currentRecoveryEpoch();
-                document.getElementById('recoveryEpoch').textContent = recoveryEpoch.toString();
-                
-                // Load role assignments
-                await loadRoleMembers();
-                
-            } catch (error) {
-                showError('Failed to load contract data: ' + error.message);
-            }
-        }
-
-        async function loadRoleMembers() {
-            const roles = [
-                { name: 'proposers', roleFunction: 'PROPOSER_ROLE', listId: 'proposersList', loadingId: 'proposersLoading' },
-                { name: 'executors', roleFunction: 'EXECUTOR_ROLE', listId: 'executorsList', loadingId: 'executorsLoading' },
-                { name: 'cancellers', roleFunction: 'CANCELLER_ROLE', listId: 'cancellersList', loadingId: 'cancellersLoading' },
-                { name: 'recoveryTriggerers', roleFunction: 'RECOVERY_TRIGGER_ROLE', listId: 'recoveryTriggerersList', loadingId: 'recoveryTriggerersLoading' },
-                { name: 'recoverers', roleFunction: 'RECOVERER_ROLE', listId: 'recoverersList', loadingId: 'recoverersLoading' }
-            ];
-
-            for (const roleInfo of roles) {
-                try {
-                    const roleHash = await contract[roleInfo.roleFunction]();
-                    const members = await getRoleMembersFromEvents(roleHash);
-                    
-                    displayRoleMembers(roleInfo.listId, roleInfo.loadingId, members);
-                } catch (error) {
-                    console.error(`Failed to load ${roleInfo.name}:`, error);
-                    document.getElementById(roleInfo.loadingId).textContent = 'Error loading';
-                }
-            }
-        }
-
-        async function getRoleMembersFromEvents(roleHash) {
-            try {
-                // Get all RoleGranted events for this role
-                const grantedFilter = contract.filters.RoleGranted(roleHash, null, null);
-                const grantedEvents = await contract.queryFilter(grantedFilter, 0, 'latest');
-                
-                // Get all RoleRevoked events for this role  
-                const revokedFilter = contract.filters.RoleRevoked(roleHash, null, null);
-                const revokedEvents = await contract.queryFilter(revokedFilter, 0, 'latest');
-                
-                // Build a map of current role holders
-                const roleMembers = new Set();
-                
-                // Add all granted addresses
-                for (const event of grantedEvents) {
-                    roleMembers.add(event.args.account);
-                }
-                
-                // Remove all revoked addresses
-                for (const event of revokedEvents) {
-                    roleMembers.delete(event.args.account);
-                }
-                
-                // Convert Set to Array and verify current status
-                const currentMembers = [];
-                for (const member of roleMembers) {
-                    // Double-check current status in case we missed any events
-                    if (await contract.hasRole(roleHash, member)) {
-                        currentMembers.push(member);
-                    }
-                }
-                
-                return currentMembers;
-            } catch (error) {
-                console.error('Error fetching role members from events:', error);
-                return [];
-            }
-        }
-
-        function displayRoleMembers(listId, loadingId, members) {
-            const loadingElement = document.getElementById(loadingId);
-            const listElement = document.getElementById(listId);
-            
-            loadingElement.style.display = 'none';
-            listElement.style.display = 'block';
-            listElement.innerHTML = '';
-            
-            if (members.length === 0) {
-                const li = document.createElement('li');
-                li.className = 'address-item';
-                li.textContent = 'No members (anyone can perform this role)';
-                li.style.fontStyle = 'italic';
-                li.style.color = '#6c757d';
-                listElement.appendChild(li);
-            } else {
-                members.forEach(member => {
-                    const li = document.createElement('li');
-                    li.className = 'address-item';
-                    li.textContent = member;
-                    listElement.appendChild(li);
-                });
-            }
-        }
-
-        function showError(message) {
-            errorMessage.textContent = message;
-            errorSection.style.display = 'block';
-            setTimeout(() => {
-                errorSection.style.display = 'none';
-            }, 5000);
-        }
-
-        // Initialize when page loads
-        window.addEventListener('load', async () => {
-            console.log('Page loaded, waiting for ethers and checking wallet...');
-            try {
-                await waitForEthers();
-                checkWallet();
-            } catch (error) {
-                console.error('Failed to initialize:', error);
-                showError('Failed to load required libraries. Please refresh the page.');
-            }
-        });
-
-        // Also check when DOM is ready (in case MetaMask loads after window.load)
-        document.addEventListener('DOMContentLoaded', async () => {
-            console.log('DOM loaded, checking wallet...');
-            // Add a delay to ensure MetaMask has time to inject itself
-            setTimeout(async () => {
-                if (connectButton.textContent === 'Connect Wallet' || connectButton.textContent === 'Install MetaMask') {
-                    try {
-                        await waitForEthers();
-                        checkWallet();
-                    } catch (error) {
-                        console.error('Failed to initialize on DOM ready:', error);
-                    }
-                }
-            }, 1000);
-        });
-
-        // Listen for MetaMask to be injected (some browsers load it asynchronously)
-        if (typeof window.ethereum === 'undefined') {
-            let attempts = 0;
-            const checkForMetaMask = setInterval(() => {
-                attempts++;
-                console.log(`Checking for MetaMask, attempt ${attempts}`);
-                
-                if (typeof window.ethereum !== 'undefined') {
-                    console.log('MetaMask found after waiting');
-                    clearInterval(checkForMetaMask);
-                    checkWallet();
-                } else if (attempts >= 10) {
-                    console.log('Gave up waiting for MetaMask');
-                    clearInterval(checkForMetaMask);
-                }
-            }, 500);
-        }
-    </script>
+    <script src="script.js"></script>
 </body>
 </html>
