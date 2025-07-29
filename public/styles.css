@@ -90,20 +90,20 @@ h1 {
 }
 
 .pending-indicator {
-    background: #ef4444;
-    color: white;
+    background: #fbbf24;
+    color: #92400e;
     font-size: 10px;
     padding: 2px 6px;
     border-radius: 10px;
     font-weight: 600;
     text-transform: uppercase;
-    animation: blink 1s infinite;
+    animation: gentlePulse 2s infinite;
     letter-spacing: 0.5px;
 }
 
-@keyframes blink {
-    0%, 50% { opacity: 1; }
-    51%, 100% { opacity: 0.3; }
+@keyframes gentlePulse {
+    0%, 100% { opacity: 1; background: #fbbf24; }
+    50% { opacity: 0.7; background: #f59e0b; }
 }
 
 /* Main Sections */
@@ -138,7 +138,7 @@ h1 {
     padding: 20px;
     background: rgba(51, 65, 85, 0.8);
     backdrop-filter: blur(10px);
-    max-height: 300px;
+    max-height: 350px;
     overflow-y: auto;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
 }
