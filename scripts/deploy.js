@@ -64,7 +64,7 @@ async function main() {
     return;
   }
 
-  const [deployer] = await ethers.getSigners();
+  const [deployer, _, __,___, tokensDeployer] = await ethers.getSigners();
 
   console.log("Deploying TimelockVault with the account:", deployer.address);
   
@@ -111,8 +111,9 @@ async function main() {
   );
 
   await timelockVault.waitForDeployment();
+  const vaultAddress = await timelockVault.getAddress();
   console.log('-------------------------------');
-  console.log("TimelockVault deployed to:", await timelockVault.getAddress());
+  console.log("TimelockVault deployed to:", vaultAddress);
   console.log('-------------------------------');
 
   console.log("Recovery mode:", await timelockVault.recoveryMode());
@@ -151,35 +152,36 @@ async function main() {
     console.log("DEPLOYING TEST TOKENS");
     console.log("=".repeat(50));
     
-    await deployTestTokens(deployer);
+    await deployTestTokens(tokensDeployer, vaultAddress);
   }
 }
 
 // Function to deploy test tokens
-async function deployTestTokens(deployer) {
+async function deployTestTokens(deployer, vaultAddress) {
   // Generate random token names and symbols
   const tokenConfigs = [
     {
-      name: generateRandomTokenName(),
-      symbol: generateRandomSymbol(),
+      name: "Dancoin",
+      symbol: "DAN",
       decimals: 18
     },
     {
-      name: generateRandomTokenName(),
-      symbol: generateRandomSymbol(),
+      name: "GoldToken",
+      symbol: "GOLD",
       decimals: 18
     },
     {
-      name: generateRandomTokenName(),
-      symbol: generateRandomSymbol(),
+      name: "AnnoyingDecimals",
+      symbol:"FU",
       decimals: 6
     }
   ];
-
-  const TestToken = await ethers.getContractFactory("TestToken");
+  console.log('Deploying tokens from account', deployer.address);
+  
   const deployedTokens = [];
-
+  
   for (let i = 0; i < tokenConfigs.length; i++) {
+    const TestToken = await ethers.getContractFactory("TestToken", deployer);
     const config = tokenConfigs[i];
     const initialSupply = ethers.parseUnits("1000000", config.decimals); // 1 million tokens
     
@@ -199,6 +201,11 @@ async function deployTestTokens(deployer) {
     
     await testToken.waitForDeployment();
     const tokenAddress = await testToken.getAddress();
+
+    if (vaultAddress){
+      console.log('Send tokens to vault');
+      await testToken.transfer(vaultAddress, ethers.parseUnits("10000", config.decimals));
+    }
     
     deployedTokens.push({
       name: config.name,
@@ -238,37 +245,6 @@ async function deployTestTokens(deployer) {
   console.log("];");
 }
 
-// Generate random token names
-function generateRandomTokenName() {
-  const prefixes = ["Crypto", "Digital", "Meta", "Quantum", "Future", "Smart", "Chain", "Block", "Hyper", "Ultra"];
-  const suffixes = ["Coin", "Token", "Cash", "Gold", "Silver", "Gem", "Crystal", "Stone", "Shard", "Core"];
-  
-  const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
-  const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
-  
-  return `${prefix}${suffix}`;
-}
-
-// Generate random token symbols (3-4 characters)
-function generateRandomSymbol() {
-  const consonants = "BCDFGHJKLMNPQRSTVWXYZ";
-  const vowels = "AEIOU";
-  
-  const length = Math.random() < 0.5 ? 3 : 4;
-  let symbol = "";
-  
-  for (let i = 0; i < length; i++) {
-    if (i % 2 === 0) {
-      // Use consonant for even positions
-      symbol += consonants[Math.floor(Math.random() * consonants.length)];
-    } else {
-      // Use vowel for odd positions
-      symbol += vowels[Math.floor(Math.random() * vowels.length)];
-    }
-  }
-  
-  return symbol;
-}
 
 main()
   .then(() => process.exit(0))

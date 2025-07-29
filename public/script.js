@@ -26,7 +26,7 @@ function waitForEthers() {
 }
 
 // Contract configuration - you'll need to update these after deployment
-const CONTRACT_ADDRESS = '0x0165878A594ca255338adfa4d48449f69242Eb8F'; // Update with your deployed contract address
+const CONTRACT_ADDRESS = '0x5FbDB2315678afecb367f032d93F642f64180aa3'; // Update with your deployed contract address
 const CONTRACT_ABI = [
     // TimelockController functions we need
     "function getMinDelay() view returns (uint256)",
@@ -123,9 +123,9 @@ const tokenAmountHelp = document.getElementById('tokenAmountHelp');
 
 // Token list with deployed test tokens
 const SUPPORTED_TOKENS = [
-    { name: "CryptoGold", symbol: "SEVO", address: "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318", decimals: 18 },
-    { name: "SmartShard", symbol: "FEPI", address: "0x610178dA211FEF7D417bC0e6FeD39F05609AD788", decimals: 18 },
-    { name: "SmartGem", symbol: "RIV", address: "0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e", decimals: 6 }
+    { name: "Dancoin", symbol: "DAN", address: "0xbdEd0D2bf404bdcBa897a74E6657f1f12e5C6fb6", decimals: 18 },
+    { name: "GoldToken", symbol: "GOLD", address: "0xA7918D253764E42d60C3ce2010a34d5a1e7C1398", decimals: 18 },
+    { name: "AnnoyingDecimals", symbol: "FU", address: "0x71a9d115E322467147391c4a71D85F8e1cA623EF", decimals: 6 }
 ];
 
 // Check if wallet is available on page load

@@ -7,7 +7,8 @@
     "compile": "hardhat compile",
     "test": "hardhat test",
     "deploy": "hardhat run scripts/deploy.js --network localhost",
-    "ui": "node server.js"
+    "ui": "node server.js",
+    "start:anvil": "anvil --port 8545 --block-time 5 --chain-id 31337"
   },
   "dependencies": {
     "@nomicfoundation/hardhat-toolbox": "^4.0.0",
