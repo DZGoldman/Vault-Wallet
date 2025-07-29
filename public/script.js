@@ -47,6 +47,7 @@ const CONTRACT_ABI = [
     // TimelockVault specific functions
     "function recoveryMode() view returns (bool)",
     "function currentRecoveryEpoch() view returns (uint256)",
+    "function triggerRecoveryMode()",
     
     // Role constants
     "function PROPOSER_ROLE() view returns (bytes32)",
@@ -121,6 +122,9 @@ const proposeTokenTransferButton = document.getElementById('proposeTokenTransfer
 const tokenInfo = document.getElementById('tokenInfo');
 const tokenError = document.getElementById('tokenError');
 const tokenAmountHelp = document.getElementById('tokenAmountHelp');
+
+// Recovery trigger button
+const recoveryTriggerButton = document.getElementById('triggerRecovery');
 
 // Token list with deployed test tokens
 const SUPPORTED_TOKENS = [
@@ -326,6 +330,9 @@ proposeTokenTransferButton.addEventListener('click', proposeTokenTransfer);
 tokenAddress.addEventListener('input', handleTokenAddressChange);
 tokenSelect.addEventListener('change', handleTokenSelectChange);
 proposeTokenTransferButton.addEventListener('click', proposeTokenTransfer);
+
+// Recovery trigger event listener
+recoveryTriggerButton.addEventListener('click', triggerRecovery);
 
 // Tab switching functionality
 function switchTab(tabType) {
@@ -1379,6 +1386,24 @@ async function checkExecutorPermission() {
     }
 }
 
+// Recovery trigger permission checking
+async function checkRecoveryTriggerPermission() {
+    if (!contract || !currentUserAddress) {
+        return false;
+    }
+    
+    try {
+        const recoveryTriggerRoleHash = await contract.RECOVERY_TRIGGER_ROLE();
+        const hasRecoveryTriggerRole = await contract.hasRole(recoveryTriggerRoleHash, currentUserAddress);
+        console.log(`User ${formatAddress(currentUserAddress)} has recovery trigger role: ${hasRecoveryTriggerRole}`);
+        
+        return hasRecoveryTriggerRole;
+    } catch (error) {
+        console.error('Error checking recovery trigger permission:', error);
+        return false;
+    }
+}
+
 async function updateButtonStates() {
     if (!contract || !currentUserAddress) {
         // Reset to default disabled state when not connected
@@ -1396,14 +1421,21 @@ async function updateButtonStates() {
         // Check executor permissions (special case for zero address)
         const isExecutor = await checkExecutorPermission();
         
-        console.log(`Role check for ${formatAddress(currentUserAddress)}: Proposer=${isProposer}, Canceller=${isCanceller}, Executor=${isExecutor}`);
+        // Check recovery trigger permissions
+        const isRecoveryTriggerer = await checkRecoveryTriggerPermission();
+        
+        console.log(`Role check for ${formatAddress(currentUserAddress)}: Proposer=${isProposer}, Canceller=${isCanceller}, Executor=${isExecutor}, RecoveryTriggerer=${isRecoveryTriggerer}`);
         
         // Update propose buttons
         updateProposalButtons(isProposer);
         
+        // Update recovery trigger button
+        updateRecoveryTriggerButton(isRecoveryTriggerer);
+        
         // Store role status for buttons
         window.userIsCanceller = isCanceller;
         window.userIsExecutor = isExecutor;
+        window.userIsRecoveryTriggerer = isRecoveryTriggerer;
         
     } catch (error) {
         console.error('Error updating button states:', error);
@@ -1433,6 +1465,22 @@ function updateProposalButtons(isProposer) {
             }
         }
     });
+}
+
+function updateRecoveryTriggerButton(isRecoveryTriggerer) {
+    const recoveryButton = document.getElementById('triggerRecovery');
+    
+    if (recoveryButton) {
+        if (!isRecoveryTriggerer) {
+            recoveryButton.disabled = true;
+            recoveryButton.title = 'Only Recovery Triggerers can activate recovery mode';
+            recoveryButton.classList.add('role-disabled');
+        } else {
+            recoveryButton.disabled = false;
+            recoveryButton.title = 'Click to trigger emergency recovery mode';
+            recoveryButton.classList.remove('role-disabled');
+        }
+    }
 }
 
 async function cancelOperation(operationId) {
@@ -1642,6 +1690,78 @@ async function executeOperation(operationId, calls, predecessor, salt) {
         }
         
         showProposalStatus(errorMsg, 'error');
+    }
+}
+
+// Trigger recovery mode
+async function triggerRecovery() {
+    console.log('triggering recovery');
+    
+    if (!contract || !provider) {
+        showError('Please connect your wallet first.');
+        return;
+    }
+
+    // Double check permissions
+    const hasPermission = await checkRecoveryTriggerPermission();
+    if (!hasPermission) {
+        showError('You do not have permission to trigger recovery mode.');
+        return;
+    }
+
+    // Confirm with user before triggering recovery
+    const confirmed = confirm(
+        '⚠️ WARNING: You are about to trigger RECOVERY MODE.\n\n' +
+        'This will:\n' +
+        '• Immediately bypass the timelock for all pending operations\n' +
+        '• Allow immediate execution of all scheduled transactions\n' +
+        '• Cannot be undone once triggered\n\n' +
+        'Are you absolutely sure you want to continue?'
+    );
+
+    if (!confirmed) {
+        return;
+    }
+
+    try {
+        recoveryTriggerButton.disabled = true;
+        recoveryTriggerButton.textContent = 'Triggering Recovery...';
+
+        const signer = provider.getSigner();
+        const contractWithSigner = contract.connect(signer);
+
+        // Trigger recovery mode (this calls the emergency recovery function in the contract)
+        const tx = await contractWithSigner.triggerRecoveryMode();
+        
+        console.log('Recovery trigger transaction sent:', tx.hash);
+        
+        // Wait for confirmation
+        const receipt = await tx.wait();
+        console.log('Recovery triggered successfully:', receipt);
+
+        // Show success message
+        alert('🚨 RECOVERY MODE ACTIVATED!\n\nAll pending operations can now be executed immediately.');
+
+        // Refresh the UI
+        await loadScheduledOperations();
+        await updateButtonStates();
+
+    } catch (error) {
+        console.error('Error triggering recovery:', error);
+        let errorMsg = 'Failed to trigger recovery mode.';
+        
+        if (error.message.includes('user rejected')) {
+            errorMsg = 'Transaction rejected by user.';
+        } else if (error.message.includes('insufficient funds')) {
+            errorMsg = 'Insufficient funds for transaction.';
+        } else if (error.message.includes('AccessControl')) {
+            errorMsg = 'Access denied: You do not have recovery trigger permissions.';
+        }
+        
+        showError(errorMsg);
+    } finally {
+        recoveryTriggerButton.disabled = false;
+        recoveryTriggerButton.textContent = '🚨 TRIGGER RECOVERY MODE';
     }
 }
 
