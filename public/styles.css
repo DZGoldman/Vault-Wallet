@@ -123,6 +123,13 @@ h1 {
     h1 {
         padding-top: 0;
     }
+    
+    .recovery-trigger-button {
+        min-width: 280px;
+        max-width: 90%;
+        font-size: 1.1em;
+        padding: 18px 30px;
+    }
 }
 
 /* Compact sections for contract info, balance, and roles */
@@ -467,6 +474,8 @@ button {
     margin: 30px 0;
     display: flex;
     justify-content: center;
+    align-items: center;
+    width: 100%;
 }
 
 .recovery-trigger-button {
@@ -483,9 +492,12 @@ button {
     transition: all 0.3s ease;
     box-shadow: 0 8px 25px rgba(220, 38, 38, 0.4);
     text-align: center;
-    min-width: 400px;
+    min-width: 350px;
+    max-width: 500px;
     position: relative;
     overflow: hidden;
+    display: block;
+    margin: 0 auto;
 }
 
 .recovery-trigger-button:not(.role-disabled) {
