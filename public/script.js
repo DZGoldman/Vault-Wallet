@@ -657,12 +657,20 @@ async function handleRecoveryModeUI(isRecoveryMode) {
     const recoveryModeSection = document.getElementById('recoveryModeSection');
     const normalModeSection = document.getElementById('normalModeSection');
     const recoveryTriggerSection = document.querySelector('.recovery-trigger-section');
+    const roleAssignmentsSection = document.getElementById('roleAssignmentsSection');
+    const infoSectionsContainer = document.querySelector('.info-sections-container');
     
     if (isRecoveryMode) {
-        // Show recovery mode UI, hide normal transaction creation
+        // Show recovery mode UI, hide normal transaction creation and role assignments
         recoveryModeSection.style.display = 'block';
         normalModeSection.style.display = 'none';
         recoveryTriggerSection.style.display = 'none';
+        roleAssignmentsSection.style.display = 'none';
+        
+        // Center the remaining two info sections
+        if (infoSectionsContainer) {
+            infoSectionsContainer.classList.add('recovery-mode');
+        }
         
         // Load recovery mode role management
         await loadRecoveryRoleManagement();
@@ -674,6 +682,12 @@ async function handleRecoveryModeUI(isRecoveryMode) {
         recoveryModeSection.style.display = 'none';
         normalModeSection.style.display = 'block';
         recoveryTriggerSection.style.display = 'block';
+        roleAssignmentsSection.style.display = 'block';
+        
+        // Restore three-column layout
+        if (infoSectionsContainer) {
+            infoSectionsContainer.classList.remove('recovery-mode');
+        }
     }
 }
 

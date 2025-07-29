@@ -54,6 +54,15 @@ h1 {
     margin-bottom: 30px;
 }
 
+/* Two-column centered layout when role assignments are hidden (recovery mode) */
+.info-sections-container.recovery-mode {
+    grid-template-columns: 1fr 1fr;
+    justify-content: center;
+    max-width: 800px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
 .info-section {
     border: 1px solid rgba(148, 163, 184, 0.2);
     border-radius: 8px;
