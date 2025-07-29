@@ -298,6 +298,12 @@ function disconnectWallet() {
     // Stop balance refresh
     stopBalanceRefresh();
     
+    // Hide pending indicator
+    const pendingIndicator = document.getElementById('pendingIndicator');
+    if (pendingIndicator) {
+        pendingIndicator.style.display = 'none';
+    }
+    
     connectionStatus.classList.remove('loading');
     connectionStatus.textContent = 'Wallet detected - Click to connect';
     connectButton.style.display = 'inline-block';
@@ -382,6 +388,62 @@ function switchTab(tabType) {
         tokenTransferPanel.classList.add('active');
     }
 }
+
+// Main tab switching functionality
+function switchMainTab(tabType) {
+    console.log('Switching to tab:', tabType);
+    
+    try {
+        // Don't switch to create transaction if it's disabled (recovery mode)
+        if (tabType === 'createTransaction') {
+            const createTransactionTab = document.getElementById('createTransactionTab');
+            if (createTransactionTab && createTransactionTab.classList.contains('disabled')) {
+                console.log('Create transaction tab is disabled, not switching');
+                return; // Don't switch
+            }
+        }
+        
+        // Remove active class from all tabs and sections
+        const toolbarTabs = document.querySelectorAll('.toolbar-tab');
+        const mainSections = document.querySelectorAll('.main-section');
+        
+        console.log('Found toolbar tabs:', toolbarTabs.length);
+        console.log('Found main sections:', mainSections.length);
+        
+        toolbarTabs.forEach(tab => tab.classList.remove('active'));
+        mainSections.forEach(section => section.classList.remove('active'));
+        
+        // Add active class to selected tab and section
+        let targetTab, targetSection;
+        
+        if (tabType === 'dashboard') {
+            targetTab = document.getElementById('dashboardTab');
+            targetSection = document.getElementById('dashboardSection');
+        } else if (tabType === 'createTransaction') {
+            targetTab = document.getElementById('createTransactionTab');
+            targetSection = document.getElementById('createTransactionSection');
+        } else if (tabType === 'operations') {
+            targetTab = document.getElementById('operationsTab');
+            targetSection = document.getElementById('operationsSection');
+        }
+        
+        console.log('Target elements found:', !!targetTab, !!targetSection);
+        
+        if (targetTab && targetSection) {
+            targetTab.classList.add('active');
+            targetSection.classList.add('active');
+            console.log('Successfully switched to', tabType);
+        } else {
+            console.error('Could not find target elements for', tabType);
+        }
+        
+    } catch (error) {
+        console.error('Error in switchMainTab:', error);
+    }
+}
+
+// Make function available globally
+window.switchMainTab = switchMainTab;
 
 // Initialize token list
 function initializeTokenList() {
@@ -840,21 +902,32 @@ async function handleRecoveryModeUI(isRecoveryMode) {
     window.isInRecoveryMode = isRecoveryMode;
     
     const recoveryModeSection = document.getElementById('recoveryModeSection');
-    const normalModeSection = document.getElementById('normalModeSection');
-    const recoveryTriggerSection = document.querySelector('.recovery-trigger-section');
+    const createTransactionTab = document.getElementById('createTransactionTab');
     const roleAssignmentsSection = document.getElementById('roleAssignmentsSection');
     const infoSectionsContainer = document.querySelector('.info-sections-container');
     
     if (isRecoveryMode) {
-        // Show recovery mode UI, hide normal transaction creation and role assignments
+        // Show recovery mode UI
         recoveryModeSection.style.display = 'block';
-        normalModeSection.style.display = 'none';
-        recoveryTriggerSection.style.display = 'none';
-        roleAssignmentsSection.style.display = 'none';
         
-        // Center the remaining two info sections
+        // Disable create transaction tab
+        createTransactionTab.classList.add('disabled');
+        createTransactionTab.title = 'Transaction creation is disabled during recovery mode';
+        
+        // Hide role assignments section in dashboard
+        if (roleAssignmentsSection) {
+            roleAssignmentsSection.style.display = 'none';
+        }
+        
+        // Center the remaining two info sections in dashboard
         if (infoSectionsContainer) {
             infoSectionsContainer.classList.add('recovery-mode');
+        }
+        
+        // Switch to dashboard if currently on create transaction tab
+        const createTransactionSection = document.getElementById('createTransactionSection');
+        if (createTransactionSection && createTransactionSection.classList.contains('active')) {
+            switchMainTab('dashboard');
         }
         
         // Load recovery mode role management
@@ -863,13 +936,19 @@ async function handleRecoveryModeUI(isRecoveryMode) {
         // Update recovery mode button states
         await updateRecoveryModeButtons();
     } else {
-        // Show normal UI, hide recovery mode
+        // Hide recovery mode UI
         recoveryModeSection.style.display = 'none';
-        normalModeSection.style.display = 'block';
-        recoveryTriggerSection.style.display = 'block';
-        roleAssignmentsSection.style.display = 'block';
         
-        // Restore three-column layout
+        // Enable create transaction tab
+        createTransactionTab.classList.remove('disabled');
+        createTransactionTab.title = '';
+        
+        // Show role assignments section in dashboard
+        if (roleAssignmentsSection) {
+            roleAssignmentsSection.style.display = 'block';
+        }
+        
+        // Restore three-column layout in dashboard
         if (infoSectionsContainer) {
             infoSectionsContainer.classList.remove('recovery-mode');
         }
@@ -1404,6 +1483,16 @@ async function loadScheduledOperations() {
         // Count pending operations (Waiting or Ready)
         const pendingOperations = operations.filter(op => op.status === 'Waiting' || op.status === 'Ready');
         const pendingCount = pendingOperations.length;
+        
+        // Update pending indicator in main toolbar
+        const pendingIndicator = document.getElementById('pendingIndicator');
+        if (pendingIndicator) {
+            if (pendingCount > 0) {
+                pendingIndicator.style.display = 'inline';
+            } else {
+                pendingIndicator.style.display = 'none';
+            }
+        }
         
         // Update operations count display based on pending status
         if (pendingCount > 0) {

@@ -46,6 +46,75 @@ h1 {
     padding-top: 10px;
 }
 
+/* Main Navigation Toolbar */
+.main-toolbar {
+    display: flex;
+    background: rgba(51, 65, 85, 0.9);
+    border-radius: 8px;
+    padding: 8px;
+    margin-bottom: 20px;
+    gap: 4px;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.toolbar-tab {
+    background: transparent;
+    color: #94a3b8;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.toolbar-tab:hover {
+    background: rgba(148, 163, 184, 0.1);
+    color: #e2e8f0;
+}
+
+.toolbar-tab.active {
+    background: var(--primary-color);
+    color: white;
+    font-weight: 600;
+}
+
+.toolbar-tab.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.pending-indicator {
+    background: #ef4444;
+    color: white;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    animation: blink 1s infinite;
+    letter-spacing: 0.5px;
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0.3; }
+}
+
+/* Main Sections */
+.main-section {
+    display: none;
+}
+
+.main-section.active {
+    display: block;
+}
+
 /* Three-column horizontal layout for info sections */
 .info-sections-container {
     display: grid;

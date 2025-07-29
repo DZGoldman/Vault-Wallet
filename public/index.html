@@ -17,8 +17,24 @@
         <h1>TimelockVault Interface</h1>
         
         <div id="contract-info" style="display: none;">
-            <!-- Three-column layout for compact info sections -->
-            <div class="info-sections-container">
+            <!-- Main Navigation Toolbar -->
+            <div class="main-toolbar">
+                <button class="toolbar-tab active" id="dashboardTab" onclick="switchMainTab('dashboard')">
+                    Dashboard
+                </button>
+                <button class="toolbar-tab" id="createTransactionTab" onclick="switchMainTab('createTransaction')">
+                    Create Transaction
+                </button>
+                <button class="toolbar-tab" id="operationsTab" onclick="switchMainTab('operations')">
+                    Operations
+                    <span class="pending-indicator" id="pendingIndicator" style="display: none;">pending</span>
+                </button>
+            </div>
+
+            <!-- Dashboard Section -->
+            <div class="main-section active" id="dashboardSection">
+                <!-- Three-column layout for compact info sections -->
+                <div class="info-sections-container">
                 <!-- Contract Information Section -->
                 <div class="info-section">
                     <h2>Contract Information</h2>
@@ -111,41 +127,17 @@
                     <div class="recovery-subtitle">Emergency protocol activation</div>
                 </button>
             </div>
-            
-            <!-- Recovery Mode Management (only visible when in recovery mode) -->
-            <div id="recoveryModeSection" class="recovery-mode-section" style="display: none;">
-                <div class="recovery-mode-header">
-                    <h2>🚨 RECOVERY MODE ACTIVE</h2>
-                    <p>All timelock delays are bypassed. Only recoverers can perform actions.</p>
-                </div>
-                
-                <div class="recovery-actions">
-                    <button id="exitRecoveryMode" class="recovery-action-button exit-recovery" title="Exit recovery mode">
-                        🔒 EXIT RECOVERY MODE
-                    </button>
-                    <button id="cancelAllOperations" class="recovery-action-button cancel-all" title="Cancel all pending operations">
-                        ❌ CANCEL ALL OPERATIONS
-                    </button>
-                </div>
-                
-                <!-- Role Management Section -->
-                <div class="recovery-role-management">
-                    <h3>Role Management</h3>
-                    <div id="recoveryRolesList" class="recovery-roles-container">
-                        <!-- Role management will be populated by JavaScript -->
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Normal Transaction Creation (hidden during recovery mode) -->
+        </div> <!-- End Dashboard Section -->
+
+        <!-- Create Transaction Section -->
+        <div class="main-section" id="createTransactionSection">
             <div id="normalModeSection">
-            
-            <h2>Create Transaction</h2>
-            
-            <div class="transaction-tabs">
-                <button class="tab-button active" id="rawTransactionTab">Raw Transaction</button>
-                <button class="tab-button" id="tokenTransferTab">Token Transfer</button>
-            </div>
+                <h2>Create Transaction</h2>
+                
+                <div class="transaction-tabs">
+                    <button class="tab-button active" id="rawTransactionTab">Raw Transaction</button>
+                    <button class="tab-button" id="tokenTransferTab">Token Transfer</button>
+                </div>
             
             <div class="transaction-form">
                 <!-- Raw Transaction Panel -->
@@ -220,7 +212,10 @@
             </div>
             
             </div> <!-- End normalModeSection -->
-            
+        </div> <!-- End Create Transaction Section -->
+
+        <!-- Operations Section -->
+        <div class="main-section" id="operationsSection">
             <h2>Scheduled Operations</h2>
             
             <div class="operations-section">
@@ -237,7 +232,34 @@
                     No scheduled operations found.
                 </div>
             </div>
+        </div> <!-- End Operations Section -->
+
+        <!-- Recovery Mode Management (only visible when in recovery mode) -->
+        <div id="recoveryModeSection" class="recovery-mode-section" style="display: none;">
+            <div class="recovery-mode-header">
+                <h2>🚨 RECOVERY MODE ACTIVE</h2>
+                <p>All timelock delays are bypassed. Only recoverers can perform actions.</p>
+            </div>
+            
+            <div class="recovery-actions">
+                <button id="exitRecoveryMode" class="recovery-action-button exit-recovery" title="Exit recovery mode">
+                    🔒 EXIT RECOVERY MODE
+                </button>
+                <button id="cancelAllOperations" class="recovery-action-button cancel-all" title="Cancel all pending operations">
+                    ❌ CANCEL ALL OPERATIONS
+                </button>
+            </div>
+            
+            <div class="recovery-roles-management">
+                <h3>Emergency Role Management</h3>
+                <p>Grant or revoke roles during recovery to restore normal operations:</p>
+                <div id="recoveryRolesList" class="recovery-roles-list">
+                    <!-- Recovery role management will be populated by JavaScript -->
+                </div>
+            </div>
         </div>
+
+    </div> <!-- End contract-info -->
         
         <div id="error-section" style="display: none;">
             <div class="error" id="errorMessage"></div>
