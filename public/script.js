@@ -70,6 +70,14 @@ let contract;
 let autoRefreshInterval = null;
 let balanceRefreshInterval = null;
 
+// Persistent event data for efficient incremental loading
+let lastQueriedBlock = 0;
+let allScheduledEvents = [];
+let allExecutedEvents = [];
+let allCancelledEvents = [];
+let allSaltEvents = [];
+let lastEventsHash = null;
+
 // DOM elements
 const connectButton = document.getElementById('connectWallet');
 const disconnectButton = document.getElementById('disconnectWallet');
@@ -208,6 +216,14 @@ function disconnectWallet() {
     provider = null;
     contract = null;
     
+    // Reset event data
+    lastQueriedBlock = 0;
+    allScheduledEvents = [];
+    allExecutedEvents = [];
+    allCancelledEvents = [];
+    allSaltEvents = [];
+    lastEventsHash = null;
+    
     // Stop auto-refresh
     stopAutoRefresh();
     
@@ -243,7 +259,6 @@ proposeButton.addEventListener('click', proposeTransaction);
 refreshOperationsButton.addEventListener('click', loadScheduledOperations);
 
 async function loadContractData() {
-    console.log('LOAD!!');
     
     try {
         // Load contract basic info
@@ -402,51 +417,62 @@ async function loadScheduledOperations() {
     }
 
     try {
-        // Show loading state
-        operationsLoading.style.display = 'block';
-        operationsList.style.display = 'none';
-        noOperations.style.display = 'none';
+        // Disable refresh button while loading
         refreshOperationsButton.disabled = true;
-        operationsCount.textContent = 'Loading...';
 
-        // Get all CallScheduled events
-        const scheduledFilter = contract.filters.CallScheduled();
-        const scheduledEvents = await contract.queryFilter(scheduledFilter, 0, 'latest');
+        // Get current block number
+        const currentBlock = await provider.getBlockNumber();
+        
+        // Determine the starting block for queries
+        const fromBlock = lastQueriedBlock === 0 ? 0 : lastQueriedBlock + 1;
+        
+        console.log(`Querying events from block ${fromBlock} to ${currentBlock} (last queried: ${lastQueriedBlock})`);
 
-        // Get all CallExecuted events to check execution status
-        const executedFilter = contract.filters.CallExecuted();
-        const executedEvents = await contract.queryFilter(executedFilter, 0, 'latest');
+        // Only query new events since last update
+        if (fromBlock <= currentBlock) {
+            // Get new CallScheduled events
+            const scheduledFilter = contract.filters.CallScheduled();
+            const newScheduledEvents = await contract.queryFilter(scheduledFilter, fromBlock, currentBlock);
+            allScheduledEvents.push(...newScheduledEvents);
 
-        // Get all Cancelled events
-        const cancelledFilter = contract.filters.Cancelled();
-        const cancelledEvents = await contract.queryFilter(cancelledFilter, 0, 'latest');
+            // Get new CallExecuted events
+            const executedFilter = contract.filters.CallExecuted();
+            const newExecutedEvents = await contract.queryFilter(executedFilter, fromBlock, currentBlock);
+            allExecutedEvents.push(...newExecutedEvents);
 
-        // Get all CallSalt events to find the correct salt for each operation
-        const saltFilter = contract.filters.CallSalt();
-        const saltEvents = await contract.queryFilter(saltFilter, 0, 'latest');
+            // Get new Cancelled events
+            const cancelledFilter = contract.filters.Cancelled();
+            const newCancelledEvents = await contract.queryFilter(cancelledFilter, fromBlock, currentBlock);
+            allCancelledEvents.push(...newCancelledEvents);
 
-        // Create maps for quick lookup
-        const executedIds = new Set(executedEvents.map(event => event.args.id));
-        const cancelledIds = new Set(cancelledEvents.map(event => event.args.id));
+            // Get new CallSalt events
+            const saltFilter = contract.filters.CallSalt();
+            const newSaltEvents = await contract.queryFilter(saltFilter, fromBlock, currentBlock);
+            allSaltEvents.push(...newSaltEvents);
+            
+            console.log(`Found new events: ${newScheduledEvents.length} scheduled, ${newExecutedEvents.length} executed, ${newCancelledEvents.length} cancelled, ${newSaltEvents.length} salt`);
+        }
+
+        // Update last queried block
+        lastQueriedBlock = currentBlock;
+
+        // Create maps for quick lookup using all accumulated events
+        const executedIds = new Set(allExecutedEvents.map(event => event.args.id));
+        const cancelledIds = new Set(allCancelledEvents.map(event => event.args.id));
         const saltMap = new Map();
         
-        // Build salt map from CallSalt events
-        for (const event of saltEvents) {
-            console.log('CallSalt event found:', {
-                operationId: event.args.id,
-                salt: event.args.salt,
-                blockNumber: event.blockNumber
-            });
+        // Build salt map from all accumulated CallSalt events
+        for (const event of allSaltEvents) {
             saltMap.set(event.args.id, event.args.salt);
         }
 
-        console.log('Total CallSalt events:', saltEvents.length);
+        console.log('Total CallSalt events:', allSaltEvents.length);
         console.log('Salt map size:', saltMap.size);
 
-        // Group scheduled events by operation ID
+        // Group all accumulated scheduled events by operation ID
         const operationsMap = new Map();
         
-        for (const event of scheduledEvents) {
+        for (const event of allScheduledEvents) {
             const { id, index, target, value, data, predecessor, delay } = event.args;
             
             if (!operationsMap.has(id)) {
@@ -536,7 +562,27 @@ async function loadScheduledOperations() {
         // Sort by block number (newest first)
         operations.sort((a, b) => b.blockNumber - a.blockNumber);
 
-        // Display operations
+        // Check if events have changed by comparing hash
+        const currentEventsHash = generateEventsHash();
+        const eventsChanged = lastEventsHash !== currentEventsHash;
+        
+        if (eventsChanged) {
+            console.log('Events changed, updating UI...');
+            lastEventsHash = currentEventsHash;
+            
+            // Show loading state only when rebuilding UI
+            operationsLoading.style.display = 'block';
+            operationsList.style.display = 'none';
+            noOperations.style.display = 'none';
+            operationsCount.textContent = 'Loading...';
+        } else {
+            console.log('No events changes detected, skipping UI update...');
+            // Still need to re-enable refresh button
+            refreshOperationsButton.disabled = false;
+            return; // Skip UI rebuild
+        }
+
+        // Display operations (only if events changed)
         operationsLoading.style.display = 'none';
         operationsCount.textContent = `${operations.length} operation${operations.length !== 1 ? 's' : ''}`;
 
@@ -573,7 +619,6 @@ async function loadScheduledOperations() {
 }
 
 function createOperationElement(operation) {
-    console.log('OP STAT!', operation.status);
     
     const div = document.createElement('div');
     div.className = 'operation-item';
@@ -1008,4 +1053,42 @@ function stopBalanceRefresh() {
         clearInterval(balanceRefreshInterval);
         balanceRefreshInterval = null;
     }
+}
+
+// Helper function to reset event data (useful for debugging or if something goes wrong)
+function resetEventData() {
+    console.log('Resetting event data...');
+    lastQueriedBlock = 0;
+    allScheduledEvents = [];
+    allExecutedEvents = [];
+    allCancelledEvents = [];
+    allSaltEvents = [];
+    lastEventsHash = null;
+    console.log('Event data and UI state reset. Next loadScheduledOperations() call will query from block 0 and rebuild UI.');
+}
+
+// Helper function to generate a hash of the current events state
+function generateEventsHash() {
+    // Create a simple hash based on event counts and IDs
+    const scheduledIds = allScheduledEvents.map(e => e.args.id + e.blockNumber).sort();
+    const executedIds = allExecutedEvents.map(e => e.args.id + e.blockNumber).sort();
+    const cancelledIds = allCancelledEvents.map(e => e.args.id + e.blockNumber).sort();
+    const saltIds = allSaltEvents.map(e => e.args.id + e.blockNumber).sort();
+    
+    // Combine all into a single string and generate a simple hash
+    const combined = JSON.stringify({
+        scheduled: scheduledIds,
+        executed: executedIds,
+        cancelled: cancelledIds,
+        salt: saltIds
+    });
+    
+    // Simple hash function
+    let hash = 0;
+    for (let i = 0; i < combined.length; i++) {
+        const char = combined.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32bit integer
+    }
+    return hash.toString();
 }
