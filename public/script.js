@@ -1926,11 +1926,10 @@ async function triggerRecovery() {
         console.log('Recovery triggered successfully:', receipt);
 
         // Show success message
-        alert('🚨 RECOVERY MODE ACTIVATED!\n\nAll pending operations can now be executed immediately.');
+        alert('🚨 RECOVERY MODE ACTIVATED!\n\nPage will refresh to update the interface.');
 
-        // Refresh the UI
-        await loadScheduledOperations();
-        await updateButtonStates();
+        // Force page refresh to update recovery mode UI
+        window.location.reload();
 
     } catch (error) {
         console.error('Error triggering recovery:', error);
