@@ -86,6 +86,7 @@ let contract;
 let currentUserAddress = null; // Track current connected user
 let autoRefreshInterval = null;
 let balanceRefreshInterval = null;
+let isInRecoveryMode = false; // Track recovery mode status
 
 // Persistent event data for efficient incremental loading
 let lastQueriedBlock = 0;
@@ -287,6 +288,9 @@ function disconnectWallet() {
     // Reset role permissions
     window.userIsCanceller = false;
     window.userIsExecutor = false;
+    window.userIsRecoveryTriggerer = false;
+    window.userIsRecoverer = false;
+    window.isInRecoveryMode = false;
     
     // Stop auto-refresh
     stopAutoRefresh();
@@ -654,6 +658,9 @@ async function proposeTokenTransfer() {
 
 // Recovery mode UI management
 async function handleRecoveryModeUI(isRecoveryMode) {
+    // Track recovery mode status globally
+    window.isInRecoveryMode = isRecoveryMode;
+    
     const recoveryModeSection = document.getElementById('recoveryModeSection');
     const normalModeSection = document.getElementById('normalModeSection');
     const recoveryTriggerSection = document.querySelector('.recovery-trigger-section');
@@ -1278,14 +1285,22 @@ function createOperationElement(operation) {
         ${operationDetails}
         <div class="operation-actions">
             ${operation.status === 'Ready' ? 
-                `<button class="execute-button ${!window.userIsExecutor ? 'role-disabled' : ''}" 
-                         onclick="executeOperation('${operation.id}', ${JSON.stringify(operation.calls).replace(/"/g, '&quot;')}, '${operation.predecessor}', '${operation.salt}')"
-                         ${!window.userIsExecutor ? 'disabled title="Connect an executor account to execute operations (or check if executors are restricted)"' : ''}>
-                    Execute
-                </button>` : 
+                window.isInRecoveryMode ? 
+                    // In recovery mode: NOBODY can execute
+                    `<button class="execute-button role-disabled" disabled 
+                             title="Operations cannot be executed during recovery mode">
+                        Execute (Disabled in Recovery)
+                    </button>` :
+                    // Normal mode: check executor permissions
+                    `<button class="execute-button ${!window.userIsExecutor ? 'role-disabled' : ''}" 
+                             onclick="executeOperation('${operation.id}', ${JSON.stringify(operation.calls).replace(/"/g, '&quot;')}, '${operation.predecessor}', '${operation.salt}')"
+                             ${!window.userIsExecutor ? 'disabled title="Connect an executor account to execute operations (or check if executors are restricted)"' : ''}>
+                        Execute
+                    </button>` : 
                 ''
             }
             ${(operation.status === 'Waiting' || operation.status === 'Ready') ? 
+                // Cancel logic is the same for both normal and recovery mode - use canceller permissions
                 `<button class="cancel-button ${!window.userIsCanceller ? 'role-disabled' : ''}" 
                          onclick="cancelOperation('${operation.id}')"
                          ${!window.userIsCanceller ? 'disabled title="Connect a canceller account to cancel operations"' : ''}>
@@ -1572,6 +1587,8 @@ async function updateButtonStates() {
         // Reset to default disabled state when not connected
         window.userIsCanceller = false;
         window.userIsExecutor = false;
+        window.userIsRecoveryTriggerer = false;
+        window.userIsRecoverer = false;
         updateProposalButtons(false);
         return;
     }
@@ -1587,7 +1604,10 @@ async function updateButtonStates() {
         // Check recovery trigger permissions
         const isRecoveryTriggerer = await checkRecoveryTriggerPermission();
         
-        console.log(`Role check for ${formatAddress(currentUserAddress)}: Proposer=${isProposer}, Canceller=${isCanceller}, Executor=${isExecutor}, RecoveryTriggerer=${isRecoveryTriggerer}`);
+        // Check recoverer permissions
+        const isRecoverer = await checkRecovererPermission();
+        
+        console.log(`Role check for ${formatAddress(currentUserAddress)}: Proposer=${isProposer}, Canceller=${isCanceller}, Executor=${isExecutor}, RecoveryTriggerer=${isRecoveryTriggerer}, Recoverer=${isRecoverer}`);
         
         // Update propose buttons
         updateProposalButtons(isProposer);
@@ -1599,12 +1619,15 @@ async function updateButtonStates() {
         window.userIsCanceller = isCanceller;
         window.userIsExecutor = isExecutor;
         window.userIsRecoveryTriggerer = isRecoveryTriggerer;
+        window.userIsRecoverer = isRecoverer;
         
     } catch (error) {
         console.error('Error updating button states:', error);
         // Default to no permissions on error
         window.userIsCanceller = false;
         window.userIsExecutor = false;
+        window.userIsRecoveryTriggerer = false;
+        window.userIsRecoverer = false;
         updateProposalButtons(false);
     }
 }
