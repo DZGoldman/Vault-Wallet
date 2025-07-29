@@ -9,6 +9,7 @@ function parseArgs() {
     executors: null,
     recoveryTriggerers: null,
     recoverers: null,
+    deployTestTokens: false,
     help: false
   };
 
@@ -46,6 +47,9 @@ function parseArgs() {
   }
   if (options.recoverers === null && process.env.RECOVERERS) {
     options.recoverers = process.env.RECOVERERS.split(',').map(addr => addr.trim());
+  }
+  if (process.env.DEPLOY_TEST_TOKENS === 'true') {
+    options.deployTestTokens = true;
   }
 
   return options;
@@ -140,6 +144,130 @@ async function main() {
   for (const recoverer of recoverers) {
     console.log(`- ${recoverer} has RECOVERER_ROLE:`, await timelockVault.hasRole(await timelockVault.RECOVERER_ROLE(), recoverer));
   }
+
+  // Deploy test tokens if requested
+  if (options.deployTestTokens) {
+    console.log("\n" + "=".repeat(50));
+    console.log("DEPLOYING TEST TOKENS");
+    console.log("=".repeat(50));
+    
+    await deployTestTokens(deployer);
+  }
+}
+
+// Function to deploy test tokens
+async function deployTestTokens(deployer) {
+  // Generate random token names and symbols
+  const tokenConfigs = [
+    {
+      name: generateRandomTokenName(),
+      symbol: generateRandomSymbol(),
+      decimals: 18
+    },
+    {
+      name: generateRandomTokenName(),
+      symbol: generateRandomSymbol(),
+      decimals: 18
+    },
+    {
+      name: generateRandomTokenName(),
+      symbol: generateRandomSymbol(),
+      decimals: 6
+    }
+  ];
+
+  const TestToken = await ethers.getContractFactory("TestToken");
+  const deployedTokens = [];
+
+  for (let i = 0; i < tokenConfigs.length; i++) {
+    const config = tokenConfigs[i];
+    const initialSupply = ethers.parseUnits("1000000", config.decimals); // 1 million tokens
+    
+    console.log(`\nDeploying Test Token ${i + 1}:`);
+    console.log(`- Name: ${config.name}`);
+    console.log(`- Symbol: ${config.symbol}`);
+    console.log(`- Decimals: ${config.decimals}`);
+    console.log(`- Initial Supply: 1,000,000 ${config.symbol}`);
+    
+    const testToken = await TestToken.deploy(
+      config.name,
+      config.symbol,
+      config.decimals,
+      deployer.address,
+      initialSupply
+    );
+    
+    await testToken.waitForDeployment();
+    const tokenAddress = await testToken.getAddress();
+    
+    deployedTokens.push({
+      name: config.name,
+      symbol: config.symbol,
+      decimals: config.decimals,
+      address: tokenAddress,
+      contract: testToken
+    });
+    
+    console.log(`- Deployed to: ${tokenAddress}`);
+    
+    // Verify deployment
+    const balance = await testToken.balanceOf(deployer.address);
+    const formattedBalance = ethers.formatUnits(balance, config.decimals);
+    console.log(`- Deployer balance: ${formattedBalance} ${config.symbol}`);
+  }
+
+  // Summary
+  console.log("\n" + "-".repeat(50));
+  console.log("TEST TOKENS DEPLOYMENT SUMMARY");
+  console.log("-".repeat(50));
+  
+  deployedTokens.forEach((token, index) => {
+    console.log(`${index + 1}. ${token.name} (${token.symbol})`);
+    console.log(`   Address: ${token.address}`);
+    console.log(`   Decimals: ${token.decimals}`);
+    console.log("");
+  });
+
+  // Generate JavaScript array for easy copy-paste into frontend
+  console.log("For frontend integration, add these to SUPPORTED_TOKENS:");
+  console.log("const SUPPORTED_TOKENS = [");
+  deployedTokens.forEach((token, index) => {
+    const comma = index === deployedTokens.length - 1 ? "" : ",";
+    console.log(`  { name: "${token.name}", symbol: "${token.symbol}", address: "${token.address}", decimals: ${token.decimals} }${comma}`);
+  });
+  console.log("];");
+}
+
+// Generate random token names
+function generateRandomTokenName() {
+  const prefixes = ["Crypto", "Digital", "Meta", "Quantum", "Future", "Smart", "Chain", "Block", "Hyper", "Ultra"];
+  const suffixes = ["Coin", "Token", "Cash", "Gold", "Silver", "Gem", "Crystal", "Stone", "Shard", "Core"];
+  
+  const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+  const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
+  
+  return `${prefix}${suffix}`;
+}
+
+// Generate random token symbols (3-4 characters)
+function generateRandomSymbol() {
+  const consonants = "BCDFGHJKLMNPQRSTVWXYZ";
+  const vowels = "AEIOU";
+  
+  const length = Math.random() < 0.5 ? 3 : 4;
+  let symbol = "";
+  
+  for (let i = 0; i < length; i++) {
+    if (i % 2 === 0) {
+      // Use consonant for even positions
+      symbol += consonants[Math.floor(Math.random() * consonants.length)];
+    } else {
+      // Use vowel for odd positions
+      symbol += vowels[Math.floor(Math.random() * vowels.length)];
+    }
+  }
+  
+  return symbol;
 }
 
 main()
@@ -168,18 +296,22 @@ Environment Variables (alternative to command line options):
   EXECUTORS                      Comma-separated executor addresses
   RECOVERY_TRIGGERERS            Comma-separated recovery triggerer addresses
   RECOVERERS                     Comma-separated recoverer addresses
+  DEPLOY_TEST_TOKENS             Set to 'true' to deploy 3 test ERC20 tokens
 
 Examples:
   # Deploy with defaults (deployer has all roles)
   npx hardhat run scripts/deploy.js --network localhost
 
+  # Deploy with test tokens
+  DEPLOY_TEST_TOKENS=true npx hardhat run scripts/deploy.js --network localhost
+
   # Deploy with custom delay using environment variable
   DELAY=7200 npx hardhat run scripts/deploy.js --network localhost
 
+  # Deploy with test tokens and custom configuration
+  DELAY=3600 DEPLOY_TEST_TOKENS=true npx hardhat run scripts/deploy.js --network localhost
+
   # Deploy with environment variables for complex configuration
   DELAY=3600 PROPOSERS=0x123...,0x456... RECOVERY_TRIGGERERS=0x789... npx hardhat run scripts/deploy.js --network localhost
-
-  # Deploy with command line options (if your shell supports it)
-  npx hardhat run scripts/deploy.js --network localhost --delay 172800 --proposers 0x123...,0x456...
 `);
 } 

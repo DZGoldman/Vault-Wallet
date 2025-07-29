@@ -83,33 +83,79 @@
             
             <h2>Create Transaction</h2>
             
+            <div class="transaction-tabs">
+                <button class="tab-button active" id="rawTransactionTab">Raw Transaction</button>
+                <button class="tab-button" id="tokenTransferTab">Token Transfer</button>
+            </div>
+            
             <div class="transaction-form">
-                <div class="form-group">
-                    <label for="targetAddress">Target Address:</label>
-                    <input type="text" id="targetAddress" placeholder="0x..." class="form-input">
+                <!-- Raw Transaction Panel -->
+                <div id="rawTransactionPanel" class="transaction-panel active">
+                    <div class="form-group">
+                        <label for="targetAddress">Target Address:</label>
+                        <input type="text" id="targetAddress" placeholder="0x..." class="form-input">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="value">Value (ETH):</label>
+                        <input type="number" id="value" placeholder="0.0" step="0.001" class="form-input">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="calldata">Call Data (hex):</label>
+                        <textarea id="calldata" placeholder="0x (leave empty for simple transfer)" class="form-textarea"></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="salt">Salt (optional):</label>
+                        <input type="text" id="salt" placeholder="Random salt will be generated if empty" class="form-input">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="delay">Delay (seconds):</label>
+                        <input type="number" id="delay" placeholder="Will use minimum delay if empty" class="form-input">
+                    </div>
+                    
+                    <button id="proposeTransaction" class="propose-button">Propose Transaction</button>
                 </div>
                 
-                <div class="form-group">
-                    <label for="value">Value (ETH):</label>
-                    <input type="number" id="value" placeholder="0.0" step="0.001" class="form-input">
+                <!-- Token Transfer Panel -->
+                <div id="tokenTransferPanel" class="transaction-panel">
+                    <div class="form-group">
+                        <label for="tokenAddress">Token Address:</label>
+                        <div class="token-input-group">
+                            <input type="text" id="tokenAddress" placeholder="0x..." class="form-input">
+                            <select id="tokenSelect" class="form-select">
+                                <option value="">Select a token...</option>
+                            </select>
+                        </div>
+                        <div id="tokenInfo" class="token-info" style="display: none;"></div>
+                        <div id="tokenError" class="error-message" style="display: none;"></div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="tokenTo">To Address:</label>
+                        <input type="text" id="tokenTo" placeholder="0x..." class="form-input" disabled>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="tokenAmount">Amount:</label>
+                        <input type="number" id="tokenAmount" placeholder="0.0" step="any" class="form-input" disabled>
+                        <div id="tokenAmountHelp" class="form-help" style="display: none;"></div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="tokenSalt">Salt (optional):</label>
+                        <input type="text" id="tokenSalt" placeholder="Random salt will be generated if empty" class="form-input">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="tokenDelay">Delay (seconds):</label>
+                        <input type="number" id="tokenDelay" placeholder="Will use minimum delay if empty" class="form-input">
+                    </div>
+                    
+                    <button id="proposeTokenTransfer" class="propose-button" disabled>Propose Token Transfer</button>
                 </div>
-                
-                <div class="form-group">
-                    <label for="calldata">Call Data (hex):</label>
-                    <textarea id="calldata" placeholder="0x (leave empty for simple transfer)" class="form-textarea"></textarea>
-                </div>
-                
-                <div class="form-group">
-                    <label for="salt">Salt (optional):</label>
-                    <input type="text" id="salt" placeholder="Random salt will be generated if empty" class="form-input">
-                </div>
-                
-                <div class="form-group">
-                    <label for="delay">Delay (seconds):</label>
-                    <input type="number" id="delay" placeholder="Will use minimum delay if empty" class="form-input">
-                </div>
-                
-                <button id="proposeTransaction" class="propose-button">Propose Transaction</button>
                 
                 <div id="proposalStatus" class="proposal-status" style="display: none;"></div>
             </div>

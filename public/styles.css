@@ -146,8 +146,43 @@ h2 {
     background: #f8f9fa;
     border: 1px solid #dee2e6;
     border-radius: 6px;
-    padding: 20px;
+    padding: 0;
     margin-top: 20px;
+}
+
+.transaction-tabs {
+    display: flex;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.tab-button {
+    background: none;
+    border: none;
+    padding: 15px 20px;
+    cursor: pointer;
+    font-size: 1em;
+    color: #495057;
+    border-bottom: 3px solid transparent;
+    transition: all 0.3s ease;
+}
+
+.tab-button:hover {
+    background-color: #e9ecef;
+}
+
+.tab-button.active {
+    color: #007bff;
+    border-bottom-color: #007bff;
+    background-color: #fff;
+}
+
+.transaction-panel {
+    display: none;
+    padding: 20px;
+}
+
+.transaction-panel.active {
+    display: block;
 }
 
 .form-group {
@@ -211,6 +246,74 @@ h2 {
 
 .propose-button:disabled {
     background-color: #6c757d;
+    cursor: not-allowed;
+}
+
+.form-select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 1em;
+    background-color: white;
+    box-sizing: border-box;
+}
+
+.form-select:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.form-select:disabled {
+    background-color: #e9ecef;
+    color: #6c757d;
+    cursor: not-allowed;
+}
+
+.token-input-group {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.token-input-group .form-input {
+    flex: 1;
+}
+
+.token-input-group .form-select {
+    flex: 1;
+}
+
+.token-info {
+    background-color: #d1ecf1;
+    border: 1px solid #bee5eb;
+    border-radius: 4px;
+    padding: 8px 12px;
+    margin-top: 5px;
+    font-size: 0.9em;
+    color: #0c5460;
+}
+
+.error-message {
+    background-color: #f8d7da;
+    border: 1px solid #f5c6cb;
+    border-radius: 4px;
+    padding: 8px 12px;
+    margin-top: 5px;
+    font-size: 0.9em;
+    color: #721c24;
+}
+
+.form-help {
+    font-size: 0.8em;
+    color: #6c757d;
+    margin-top: 3px;
+}
+
+.form-input:disabled, .form-select:disabled {
+    background-color: #e9ecef;
+    color: #6c757d;
     cursor: not-allowed;
 }
 

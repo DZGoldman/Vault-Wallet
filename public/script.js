@@ -93,6 +93,31 @@ const operationsLoading = document.getElementById('operationsLoading');
 const operationsList = document.getElementById('operationsList');
 const noOperations = document.getElementById('noOperations');
 
+// Tab elements
+const rawTransactionTab = document.getElementById('rawTransactionTab');
+const tokenTransferTab = document.getElementById('tokenTransferTab');
+const rawTransactionPanel = document.getElementById('rawTransactionPanel');
+const tokenTransferPanel = document.getElementById('tokenTransferPanel');
+
+// Token transfer elements
+const tokenAddress = document.getElementById('tokenAddress');
+const tokenSelect = document.getElementById('tokenSelect');
+const tokenTo = document.getElementById('tokenTo');
+const tokenAmount = document.getElementById('tokenAmount');
+const tokenSalt = document.getElementById('tokenSalt');
+const tokenDelay = document.getElementById('tokenDelay');
+const proposeTokenTransferButton = document.getElementById('proposeTokenTransfer');
+const tokenInfo = document.getElementById('tokenInfo');
+const tokenError = document.getElementById('tokenError');
+const tokenAmountHelp = document.getElementById('tokenAmountHelp');
+
+// Token list with deployed test tokens
+const SUPPORTED_TOKENS = [
+    { name: "CryptoGold", symbol: "SEVO", address: "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318", decimals: 18 },
+    { name: "SmartShard", symbol: "FEPI", address: "0x610178dA211FEF7D417bC0e6FeD39F05609AD788", decimals: 18 },
+    { name: "SmartGem", symbol: "RIV", address: "0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e", decimals: 6 }
+];
+
 // Check if wallet is available on page load
 async function checkWallet() {
     console.log('Checking wallet...', typeof window.ethereum);
@@ -257,6 +282,318 @@ proposeButton.addEventListener('click', proposeTransaction);
 
 // Refresh operations event listener
 refreshOperationsButton.addEventListener('click', loadScheduledOperations);
+
+// Tab switching event listeners
+rawTransactionTab.addEventListener('click', () => switchTab('raw'));
+tokenTransferTab.addEventListener('click', () => switchTab('token'));
+
+// Token transfer event listeners
+tokenAddress.addEventListener('input', handleTokenAddressChange);
+tokenSelect.addEventListener('change', handleTokenSelectChange);
+proposeTokenTransferButton.addEventListener('click', proposeTokenTransfer);
+
+// Token transfer event listeners
+tokenAddress.addEventListener('input', handleTokenAddressChange);
+tokenSelect.addEventListener('change', handleTokenSelectChange);
+proposeTokenTransferButton.addEventListener('click', proposeTokenTransfer);
+
+// Tab switching functionality
+function switchTab(tabType) {
+    if (tabType === 'raw') {
+        rawTransactionTab.classList.add('active');
+        tokenTransferTab.classList.remove('active');
+        rawTransactionPanel.classList.add('active');
+        tokenTransferPanel.classList.remove('active');
+    } else if (tabType === 'token') {
+        rawTransactionTab.classList.remove('active');
+        tokenTransferTab.classList.add('active');
+        rawTransactionPanel.classList.remove('active');
+        tokenTransferPanel.classList.add('active');
+    }
+}
+
+// Initialize token list
+function initializeTokenList() {
+    tokenSelect.innerHTML = '<option value="">Select a token...</option>';
+    SUPPORTED_TOKENS.forEach(token => {
+        const option = document.createElement('option');
+        option.value = token.address;
+        option.textContent = `${token.name} (${token.address.slice(0, 6)}...${token.address.slice(-4)})`;
+        tokenSelect.appendChild(option);
+    });
+}
+
+// Token address handling
+async function handleTokenAddressChange() {
+    const address = tokenAddress.value.trim();
+    
+    // Clear previous state
+    tokenInfo.style.display = 'none';
+    tokenError.style.display = 'none';
+    tokenAmountHelp.style.display = 'none';
+    
+    // Disable other fields if no address
+    if (!address) {
+        disableTokenFields();
+        return;
+    }
+    
+    // Validate address format
+    if (!ethers.utils.isAddress(address)) {
+        showTokenError('Invalid token address format');
+        disableTokenFields();
+        return;
+    }
+    
+    // Query token contract for decimals
+    try {
+        await validateAndLoadToken(address);
+    } catch (error) {
+        console.error('Error validating token:', error);
+        showTokenError('Failed to load token information. Make sure this is a valid ERC20 token address.');
+        disableTokenFields();
+    }
+}
+
+// Token select handling
+function handleTokenSelectChange() {
+    const selectedAddress = tokenSelect.value;
+    if (selectedAddress) {
+        tokenAddress.value = selectedAddress;
+        handleTokenAddressChange();
+    }
+}
+
+// Validate and load token information
+async function validateAndLoadToken(address) {
+    if (!provider) {
+        throw new Error('Provider not connected');
+    }
+    
+    // Create a simple ERC20 contract interface to get decimals and symbol
+    const erc20Abi = [
+        "function decimals() view returns (uint8)",
+        "function symbol() view returns (string)",
+        "function name() view returns (string)"
+    ];
+    
+    const tokenContract = new ethers.Contract(address, erc20Abi, provider);
+    
+    // Get token information
+    const decimals = await tokenContract.decimals();
+    let symbol = '';
+    let name = '';
+    
+    try {
+        symbol = await tokenContract.symbol();
+        name = await tokenContract.name();
+    } catch (error) {
+        // Some tokens might not have symbol/name, that's ok
+        console.log('Could not get token symbol/name:', error);
+    }
+    
+    // Store token info for later use
+    tokenAddress.dataset.decimals = decimals.toString();
+    tokenAddress.dataset.symbol = symbol;
+    tokenAddress.dataset.name = name;
+    
+    // Show token info
+    const displayName = name || symbol || 'Unknown Token';
+    const displaySymbol = symbol || 'TOKEN';
+    tokenInfo.textContent = `Token: ${displayName} (${displaySymbol}) - ${decimals} decimals`;
+    tokenInfo.style.display = 'block';
+    
+    // Show amount help
+    tokenAmountHelp.textContent = `Enter amount in ${displaySymbol} (human readable format)`;
+    tokenAmountHelp.style.display = 'block';
+    
+    // Enable other fields
+    enableTokenFields();
+}
+
+// Enable token form fields
+function enableTokenFields() {
+    tokenTo.disabled = false;
+    tokenAmount.disabled = false;
+    proposeTokenTransferButton.disabled = false;
+}
+
+// Disable token form fields
+function disableTokenFields() {
+    tokenTo.disabled = true;
+    tokenAmount.disabled = true;
+    proposeTokenTransferButton.disabled = true;
+    tokenTo.value = '';
+    tokenAmount.value = '';
+}
+
+// Show token error
+function showTokenError(message) {
+    tokenError.textContent = message;
+    tokenError.style.display = 'block';
+}
+
+// Token transfer proposal
+async function proposeTokenTransfer() {
+    if (!contract || !provider) {
+        showError('Please connect your wallet first.');
+        return;
+    }
+
+    try {
+        // Get form values
+        const tokenAddr = tokenAddress.value.trim();
+        const toAddress = tokenTo.value.trim();
+        const amount = tokenAmount.value.trim();
+        const saltInput = tokenSalt.value.trim();
+        const delayInput = tokenDelay.value.trim();
+
+        // Validate required fields
+        if (!tokenAddr) {
+            showError('Token address is required.');
+            return;
+        }
+
+        if (!ethers.utils.isAddress(tokenAddr)) {
+            showError('Invalid token address.');
+            return;
+        }
+
+        if (!toAddress) {
+            showError('To address is required.');
+            return;
+        }
+
+        if (!ethers.utils.isAddress(toAddress)) {
+            showError('Invalid to address.');
+            return;
+        }
+
+        if (!amount || parseFloat(amount) <= 0) {
+            showError('Amount must be greater than 0.');
+            return;
+        }
+
+        // Get token decimals
+        const decimals = parseInt(tokenAddress.dataset.decimals || '18');
+        const symbol = tokenAddress.dataset.symbol || 'TOKEN';
+
+        // Convert amount to raw units (like wei for ETH)
+        const rawAmount = ethers.utils.parseUnits(amount, decimals);
+
+        // Create ERC20 transfer call data
+        const transferCalldata = ethers.utils.id('transfer(address,uint256)').slice(0, 10) +
+            ethers.utils.defaultAbiCoder.encode(['address', 'uint256'], [toAddress, rawAmount]).slice(2);
+
+        // Set up transaction parameters
+        const valueWei = ethers.BigNumber.from(0); // No ETH value for token transfer
+        const predecessor = ethers.constants.HashZero;
+        
+        // Generate salt if not provided
+        let salt;
+        if (saltInput) {
+            salt = ethers.utils.formatBytes32String(saltInput);
+        } else {
+            const randomBytes = ethers.utils.randomBytes(32);
+            salt = ethers.utils.hexlify(randomBytes);
+        }
+
+        // Get delay
+        let delay;
+        if (delayInput) {
+            delay = parseInt(delayInput);
+        } else {
+            const minDelay = await contract.getMinDelay();
+            delay = minDelay.toNumber();
+        }
+
+        showProposalStatus('Preparing token transfer...', 'pending');
+        proposeTokenTransferButton.disabled = true;
+
+        // Get the signer for the transaction
+        const signer = provider.getSigner();
+        const contractWithSigner = contract.connect(signer);
+
+        // Generate operation hash for reference
+        const operationHash = await contract.hashOperation(
+            tokenAddr,
+            valueWei,
+            transferCalldata,
+            predecessor,
+            salt
+        );
+
+        showProposalStatus('Submitting token transfer to blockchain...', 'pending');
+
+        // Call the schedule function
+        const tx = await contractWithSigner.schedule(
+            tokenAddr,
+            valueWei,
+            transferCalldata,
+            predecessor,
+            salt,
+            delay
+        );
+
+        showProposalStatus('Token transfer submitted! Waiting for confirmation...', 'pending');
+
+        // Wait for transaction to be mined
+        const receipt = await tx.wait();
+
+        showProposalStatus(
+            `Token transfer proposed successfully!
+            Transaction Hash: ${receipt.transactionHash}
+            Operation Hash: ${operationHash}
+            Transfer: ${amount} ${symbol} to ${toAddress}
+            Ready for execution after delay period.`, 
+            'success'
+        );
+
+        // Clear form
+        tokenAddress.value = '';
+        tokenTo.value = '';
+        tokenAmount.value = '';
+        tokenSalt.value = '';
+        tokenDelay.value = '';
+        disableTokenFields();
+        tokenInfo.style.display = 'none';
+        tokenAmountHelp.style.display = 'none';
+
+        // Automatically refresh operations after successful proposal
+        setTimeout(() => {
+            loadScheduledOperations();
+        }, 1000);
+
+        console.log('Token transfer proposal successful:', {
+            txHash: receipt.transactionHash,
+            operationHash: operationHash,
+            token: tokenAddr,
+            to: toAddress,
+            amount: amount,
+            rawAmount: rawAmount.toString(),
+            salt: salt,
+            delay: delay
+        });
+
+    } catch (error) {
+        console.error('Error proposing token transfer:', error);
+        
+        let errorMsg = 'Failed to propose token transfer: ';
+        if (error.code === 4001) {
+            errorMsg += 'Transaction rejected by user.';
+        } else if (error.message.includes('AccessControl')) {
+            errorMsg += 'You do not have the PROPOSER_ROLE required to propose transactions.';
+        } else if (error.message.includes('TimelockController: insufficient delay')) {
+            errorMsg += 'The specified delay is less than the minimum required delay.';
+        } else {
+            errorMsg += error.message;
+        }
+        
+        showProposalStatus(errorMsg, 'error');
+    } finally {
+        proposeTokenTransferButton.disabled = false;
+    }
+}
 
 async function loadContractData() {
     
@@ -970,6 +1307,7 @@ window.addEventListener('load', async () => {
     console.log('Page loaded, waiting for ethers and checking wallet...');
     try {
         await waitForEthers();
+        initializeTokenList(); // Initialize token dropdown
         checkWallet();
     } catch (error) {
         console.error('Failed to initialize:', error);
@@ -980,6 +1318,7 @@ window.addEventListener('load', async () => {
 // Also check when DOM is ready (in case MetaMask loads after window.load)
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('DOM loaded, checking wallet...');
+    initializeTokenList(); // Initialize token dropdown
     // Add a delay to ensure MetaMask has time to inject itself
     setTimeout(async () => {
         if (connectButton.textContent === 'Connect Wallet' || connectButton.textContent === 'Install MetaMask') {
