@@ -508,3 +508,172 @@ h2 {
     background-color: #6c757d;
     cursor: not-allowed;
 }
+
+/* Enhanced Transaction Display Styles */
+.operation-info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+}
+
+.operation-type {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--gray-600);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: var(--space-xs);
+}
+
+.transaction-display {
+    padding: 0;
+}
+
+.transaction-summary {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-lg);
+    background: var(--surface-primary);
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--space-md);
+    border: 1px solid var(--gray-200);
+    transition: all var(--transition-fast);
+}
+
+.transaction-summary:hover {
+    border-color: var(--gray-300);
+    box-shadow: var(--shadow-sm);
+}
+
+.transaction-icon {
+    font-size: 1.5rem;
+    line-height: 1;
+    flex-shrink: 0;
+    opacity: 0.8;
+}
+
+.transaction-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.transaction-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--gray-900);
+    margin-bottom: 2px;
+}
+
+.transaction-subtitle {
+    font-size: 0.8125rem;
+    color: var(--gray-500);
+    font-family: var(--font-mono);
+}
+
+.transaction-amount {
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.amount-value {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: var(--gray-900);
+    font-family: var(--font-mono);
+    line-height: 1.2;
+}
+
+.amount-currency {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--gray-500);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-top: 2px;
+}
+
+.transaction-details {
+    display: grid;
+    gap: var(--space-xs);
+}
+
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--gray-50);
+    border-radius: var(--radius-md);
+    border: none;
+}
+
+.detail-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--gray-600);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    flex-shrink: 0;
+    margin-right: var(--space-lg);
+}
+
+.detail-value {
+    font-size: 0.8125rem;
+    color: var(--gray-800);
+    text-align: right;
+    word-break: break-all;
+    flex: 1;
+    min-width: 0;
+}
+
+.address-value {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    background: var(--gray-200);
+    padding: 2px var(--space-xs);
+    border-radius: var(--radius-sm);
+    display: inline-block;
+    margin-left: var(--space-sm);
+}
+
+/* Clean, minimal transaction type indicators */
+.eth-transfer .transaction-icon {
+    color: #f59e0b;
+}
+
+.token-transfer .transaction-icon {
+    color: #3b82f6;
+}
+
+.generic-transaction .transaction-icon {
+    color: var(--gray-600);
+}
+
+/* Responsive adjustments for transaction displays */
+@media (max-width: 768px) {
+    .transaction-summary {
+        flex-direction: column;
+        text-align: center;
+        gap: var(--space-sm);
+    }
+    
+    .transaction-amount {
+        text-align: center;
+    }
+    
+    .detail-row {
+        flex-direction: column;
+        gap: var(--space-xs);
+        text-align: left;
+    }
+    
+    .detail-label {
+        margin-right: 0;
+        margin-bottom: var(--space-xs);
+    }
+    
+    .detail-value {
+        text-align: left;
+    }
+}

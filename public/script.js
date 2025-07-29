@@ -133,6 +133,7 @@ async function checkWallet() {
     
     if (typeof window.ethereum !== 'undefined') {
         console.log('MetaMask detected');
+        connectionStatus.classList.remove('loading');
         connectionStatus.textContent = 'Wallet detected - Click to connect';
         connectButton.textContent = 'Connect Wallet';
         
@@ -152,6 +153,7 @@ async function checkWallet() {
         }
     } else {
         console.log('MetaMask not detected');
+        connectionStatus.classList.remove('loading');
         connectionStatus.textContent = 'No wallet detected - Please install MetaMask';
         connectButton.textContent = 'Install MetaMask';
         
@@ -195,6 +197,7 @@ async function connectWallet() {
         
         contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
         
+        connectionStatus.classList.remove('loading');
         connectionStatus.textContent = `Connected: ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`;
         connectButton.style.display = 'none';
         disconnectButton.style.display = 'inline-block';
@@ -213,6 +216,7 @@ async function connectWallet() {
                 try {
                     const signer = provider.getSigner();
                     const newAddress = await signer.getAddress();
+                    connectionStatus.classList.remove('loading');
                     connectionStatus.textContent = `Connected: ${newAddress.slice(0, 6)}...${newAddress.slice(-4)}`;
                     
                     // Reload contract data for new account
@@ -265,6 +269,7 @@ function disconnectWallet() {
     // Stop balance refresh
     stopBalanceRefresh();
     
+    connectionStatus.classList.remove('loading');
     connectionStatus.textContent = 'Wallet detected - Click to connect';
     connectButton.style.display = 'inline-block';
     connectButton.textContent = 'Connect Wallet';
@@ -1024,7 +1029,6 @@ async function loadScheduledOperations() {
 }
 
 function createOperationElement(operation) {
-    
     const div = document.createElement('div');
     div.className = 'operation-item';
     
@@ -1033,33 +1037,28 @@ function createOperationElement(operation) {
     const readyTime = currentTime + operation.delay;
     const readyDate = new Date(readyTime * 1000);
     
+    // Analyze transaction type for better display
+    const transactionInfo = analyzeTransactionType(operation.calls);
+    
+    // Create different displays based on transaction type
+    let operationDetails;
+    if (transactionInfo.type === 'eth_transfer') {
+        operationDetails = createETHTransferDisplay(transactionInfo, operation);
+    } else if (transactionInfo.type === 'token_transfer') {
+        operationDetails = createTokenTransferDisplay(transactionInfo, operation);
+    } else {
+        operationDetails = createGenericTransactionDisplay(operation);
+    }
+    
     div.innerHTML = `
         <div class="operation-header">
-            <div class="operation-id">ID: ${operation.id}</div>
+            <div class="operation-info">
+                <div class="operation-id">ID: ${operation.id}</div>
+                <div class="operation-type">${transactionInfo.displayName}</div>
+            </div>
             <div class="operation-status ${operation.statusClass}">${operation.status}</div>
         </div>
-        <div class="operation-details">
-            <div class="operation-field">
-                <div class="operation-field-label">Target${operation.calls.length > 1 ? 's' : ''}</div>
-                <div class="operation-field-value">${operation.calls.map(call => call.target).join(', ')}</div>
-            </div>
-            <div class="operation-field">
-                <div class="operation-field-label">Value${operation.calls.length > 1 ? 's' : ''} (ETH)</div>
-                <div class="operation-field-value">${operation.calls.map(call => ethers.utils.formatEther(call.value)).join(', ')}</div>
-            </div>
-            <div class="operation-field">
-                <div class="operation-field-label">Transaction Hash</div>
-                <div class="operation-field-value">${operation.transactionHash}</div>
-            </div>
-            <div class="operation-field">
-                <div class="operation-field-label">Delay</div>
-                <div class="operation-field-value">${operation.delay} seconds (${Math.round(operation.delay / 3600)} hours)</div>
-            </div>
-            <div class="operation-field operation-time">
-                <div class="operation-field-label">Ready Time (estimated)</div>
-                <div class="operation-field-value">${readyDate.toLocaleString()}</div>
-            </div>
-        </div>
+        ${operationDetails}
         <div class="operation-actions">
             ${operation.status === 'Ready' ? 
                 `<button class="execute-button" onclick="executeOperation('${operation.id}', ${JSON.stringify(operation.calls).replace(/"/g, '&quot;')}, '${operation.predecessor}', '${operation.salt}')">
@@ -1071,6 +1070,209 @@ function createOperationElement(operation) {
     `;
     
     return div;
+}
+
+// Analyze transaction type for better display
+function analyzeTransactionType(calls) {
+    if (calls.length === 1) {
+        const call = calls[0];
+        
+        // Check for ETH transfer (no data or empty data)
+        if (!call.data || call.data === '0x' || call.data === '0x00') {
+            const valueEth = ethers.utils.formatEther(call.value);
+            return {
+                type: 'eth_transfer',
+                displayName: '💰 ETH Transfer',
+                to: call.target,
+                amount: valueEth
+            };
+        }
+        
+        // Check for ERC20 token transfer
+        if (call.data.length >= 10) {
+            const methodSignature = call.data.slice(0, 10);
+            const transferSignature = '0xa9059cbb'; // transfer(address,uint256)
+            
+            if (methodSignature.toLowerCase() === transferSignature.toLowerCase()) {
+                try {
+                    // Decode the transfer call data
+                    const decoded = ethers.utils.defaultAbiCoder.decode(
+                        ['address', 'uint256'],
+                        '0x' + call.data.slice(10)
+                    );
+                    
+                    const recipient = decoded[0];
+                    const amount = decoded[1];
+                    
+                    // Try to find token info from our supported tokens list
+                    const tokenInfo = SUPPORTED_TOKENS.find(token => 
+                        token.address.toLowerCase() === call.target.toLowerCase()
+                    );
+                    
+                    let formattedAmount, symbol;
+                    if (tokenInfo) {
+                        formattedAmount = ethers.utils.formatUnits(amount, tokenInfo.decimals);
+                        symbol = tokenInfo.symbol;
+                    } else {
+                        // Unknown token - show raw amount
+                        formattedAmount = amount.toString();
+                        symbol = 'TOKENS';
+                    }
+                    
+                    return {
+                        type: 'token_transfer',
+                        displayName: '🪙 Token Transfer',
+                        tokenAddress: call.target,
+                        tokenName: tokenInfo ? tokenInfo.name : 'Unknown Token',
+                        tokenSymbol: symbol,
+                        to: recipient,
+                        amount: formattedAmount,
+                        rawAmount: amount.toString(),
+                        decimals: tokenInfo ? tokenInfo.decimals : null
+                    };
+                } catch (error) {
+                    console.log('Error decoding token transfer data:', error);
+                }
+            }
+        }
+    }
+    
+    // Default: generic transaction
+    let displayName = '⚙️ Smart Contract Call';
+    if (calls.length > 1) {
+        displayName = '📦 Batch Operation';
+    }
+    
+    return {
+        type: 'generic',
+        displayName: displayName
+    };
+}
+
+// Create ETH transfer display
+function createETHTransferDisplay(transactionInfo, operation) {
+    return `
+        <div class="operation-details transaction-display eth-transfer">
+            <div class="transaction-summary">
+                <div class="transaction-icon">💰</div>
+                <div class="transaction-info">
+                    <div class="transaction-title">Send ${transactionInfo.amount} ETH</div>
+                    <div class="transaction-subtitle">to ${formatAddress(transactionInfo.to)}</div>
+                </div>
+            </div>
+            
+            <div class="transaction-details">
+                <div class="detail-row">
+                    <span class="detail-label">Recipient</span>
+                    <span class="detail-value address-value">${transactionInfo.to}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Amount</span>
+                    <span class="detail-value">${transactionInfo.amount} ETH</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Transaction Hash</span>
+                    <span class="detail-value address-value">${operation.transactionHash}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Delay Period</span>
+                    <span class="detail-value">${operation.delay} seconds (${Math.round(operation.delay / 3600)} hours)</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Ready Time</span>
+                    <span class="detail-value">${new Date((Math.floor(Date.now() / 1000) + operation.delay) * 1000).toLocaleString()}</span>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// Create token transfer display
+function createTokenTransferDisplay(transactionInfo, operation) {
+    return `
+        <div class="operation-details transaction-display token-transfer">
+            <div class="transaction-summary">
+                <div class="transaction-icon">🪙</div>
+                <div class="transaction-info">
+                    <div class="transaction-title">Send ${transactionInfo.amount} ${transactionInfo.tokenSymbol}</div>
+                    <div class="transaction-subtitle">to ${formatAddress(transactionInfo.to)}</div>
+                </div>
+            </div>
+            
+            <div class="transaction-details">
+                <div class="detail-row">
+                    <span class="detail-label">Token</span>
+                    <span class="detail-value">
+                        ${transactionInfo.tokenName} (${transactionInfo.tokenSymbol})
+                        <span class="address-value">${transactionInfo.tokenAddress}</span>
+                    </span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Recipient</span>
+                    <span class="detail-value address-value">${transactionInfo.to}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Amount</span>
+                    <span class="detail-value">${transactionInfo.amount} ${transactionInfo.tokenSymbol}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Transaction Hash</span>
+                    <span class="detail-value address-value">${operation.transactionHash}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Delay Period</span>
+                    <span class="detail-value">${operation.delay} seconds (${Math.round(operation.delay / 3600)} hours)</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Ready Time</span>
+                    <span class="detail-value">${new Date((Math.floor(Date.now() / 1000) + operation.delay) * 1000).toLocaleString()}</span>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// Create generic transaction display (fallback)
+function createGenericTransactionDisplay(operation) {
+    return `
+        <div class="operation-details transaction-display generic-transaction">
+            <div class="transaction-summary">
+                <div class="transaction-icon">${operation.calls.length > 1 ? '📦' : '⚙️'}</div>
+                <div class="transaction-info">
+                    <div class="transaction-title">${operation.calls.length > 1 ? 'Batch Operation' : 'Smart Contract Call'}</div>
+                    <div class="transaction-subtitle">${operation.calls.length} call${operation.calls.length > 1 ? 's' : ''}</div>
+                </div>
+            </div>
+            
+            <div class="transaction-details">
+                <div class="detail-row">
+                    <span class="detail-label">Target${operation.calls.length > 1 ? 's' : ''}</span>
+                    <span class="detail-value address-value">${operation.calls.map(call => call.target).join(', ')}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Value${operation.calls.length > 1 ? 's' : ''} (ETH)</span>
+                    <span class="detail-value">${operation.calls.map(call => ethers.utils.formatEther(call.value)).join(', ')}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Transaction Hash</span>
+                    <span class="detail-value address-value">${operation.transactionHash}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Delay Period</span>
+                    <span class="detail-value">${operation.delay} seconds (${Math.round(operation.delay / 3600)} hours)</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Ready Time</span>
+                    <span class="detail-value">${new Date((Math.floor(Date.now() / 1000) + operation.delay) * 1000).toLocaleString()}</span>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// Helper function to format addresses for display
+function formatAddress(address) {
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
 async function executeOperation(operationId, calls, predecessor, salt) {
