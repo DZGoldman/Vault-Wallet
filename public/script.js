@@ -33,6 +33,7 @@ const CONTRACT_ABI = [
     "function hasRole(bytes32 role, address account) view returns (bool)",
     "function getRoleAdmin(bytes32 role) view returns (bytes32)",
     "function schedule(address target, uint256 value, bytes calldata data, bytes32 predecessor, bytes32 salt, uint256 delay)",
+    "function cancel(bytes32 id)",
     "function execute(address target, uint256 value, bytes calldata data, bytes32 predecessor, bytes32 salt)",
     "function executeBatch(address[] calldata targets, uint256[] calldata values, bytes[] calldata payloads, bytes32 predecessor, bytes32 salt)",
     "function hashOperation(address target, uint256 value, bytes calldata data, bytes32 predecessor, bytes32 salt) pure returns (bytes32)",
@@ -1066,6 +1067,12 @@ function createOperationElement(operation) {
                 </button>` : 
                 ''
             }
+            ${(operation.status === 'Waiting' || operation.status === 'Ready') ? 
+                `<button class="cancel-button" onclick="cancelOperation('${operation.id}')">
+                    Cancel
+                </button>` : 
+                ''
+            }
         </div>
     `;
     
@@ -1273,6 +1280,51 @@ function createGenericTransactionDisplay(operation) {
 // Helper function to format addresses for display
 function formatAddress(address) {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
+async function cancelOperation(operationId) {
+    if (!contract || !provider) {
+        showError('Please connect your wallet first.');
+        return;
+    }
+
+    try {
+        // Get the signer for the transaction
+        const signer = provider.getSigner();
+        const contractWithSigner = contract.connect(signer);
+
+        console.log('=== CANCEL DEBUG INFO ===');
+        console.log('Operation ID:', operationId);
+
+        // Show confirmation
+        if (!confirm(`Are you sure you want to cancel operation ${operationId}?\n\nThis action cannot be undone. The operation will be permanently cancelled.`)) {
+            return;
+        }
+
+        showProposalStatus('Cancelling operation...', 'pending');
+
+        // Call the cancel function
+        const tx = await contractWithSigner.cancel(operationId);
+        
+        console.log('Cancel transaction hash:', tx.hash);
+        showProposalStatus('Cancel transaction submitted. Waiting for confirmation...', 'pending');
+
+        // Wait for transaction confirmation
+        const receipt = await tx.wait();
+        console.log('Cancel transaction confirmed:', receipt);
+
+        showProposalStatus(`Operation cancelled successfully!`, 'success');
+
+        // Refresh the operations list
+        setTimeout(() => {
+            loadContractData();
+        }, 2000);
+
+    } catch (error) {
+        console.error('Error cancelling operation:', error);
+        showError(`Failed to cancel operation: ${error.message}`);
+        showProposalStatus('', 'hidden');
+    }
 }
 
 async function executeOperation(operationId, calls, predecessor, salt) {

@@ -488,6 +488,10 @@ h2 {
 .operation-actions {
     margin-top: 15px;
     text-align: right;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    align-items: center;
 }
 
 .execute-button {
@@ -505,6 +509,25 @@ h2 {
 }
 
 .execute-button:disabled {
+    background-color: #6c757d;
+    cursor: not-allowed;
+}
+
+.cancel-button {
+    background-color: #dc3545;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+}
+
+.cancel-button:hover {
+    background-color: #c82333;
+}
+
+.cancel-button:disabled {
     background-color: #6c757d;
     cursor: not-allowed;
 }
