@@ -32,8 +32,26 @@ body {
 .connection-status {
     color: #94a3b8;
     font-size: 0.9em;
-    white-space: nowrap;
+    white-space: normal;
     font-weight: 500;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.3;
+}
+
+.connection-status:hover {
+    max-width: none;
+    white-space: normal;
+    word-break: break-word;
+}
+
+.connection-status .user-roles {
+    color: #38bdf8;
+    font-size: 0.8em;
+    font-weight: 600;
+    display: block;
+    margin-top: 2px;
 }
 
 h1 {

@@ -212,7 +212,7 @@ async function connectWallet() {
         contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
         
         connectionStatus.classList.remove('loading');
-        connectionStatus.textContent = `Connected: ${userAddress.slice(0, 6)}...${userAddress.slice(-4)}`;
+        await updateConnectionStatus();
         connectButton.style.display = 'none';
         disconnectButton.style.display = 'inline-block';
         
@@ -235,7 +235,7 @@ async function connectWallet() {
                     const newAddress = await signer.getAddress();
                     currentUserAddress = newAddress; // Update current user address
                     connectionStatus.classList.remove('loading');
-                    connectionStatus.textContent = `Connected: ${newAddress.slice(0, 6)}...${newAddress.slice(-4)}`;
+                    await updateConnectionStatus();
                     
                     // Reload contract data for new account
                     await loadContractData();
@@ -1846,6 +1846,85 @@ async function checkUserRole(roleName) {
     }
 }
 
+// Update connection status with address and roles
+async function updateConnectionStatus() {
+    if (!currentUserAddress) {
+        connectionStatus.innerHTML = 'Not connected';
+        return;
+    }
+    
+    const shortAddress = `${currentUserAddress.slice(0, 6)}...${currentUserAddress.slice(-4)}`;
+    
+    try {
+        const userRoles = await getUserRoles();
+        
+        if (userRoles.length > 0) {
+            const roleText = userRoles.join(', ');
+            connectionStatus.innerHTML = `Connected: ${shortAddress}<br><span class="user-roles">${roleText}</span>`;
+        } else {
+            connectionStatus.innerHTML = `Connected: ${shortAddress}`;
+        }
+    } catch (error) {
+        console.error('Error updating connection status:', error);
+        connectionStatus.innerHTML = `Connected: ${shortAddress}`;
+    }
+}
+
+// Get all roles for the current user (for connection status display)
+async function getUserRoles() {
+    if (!contract || !currentUserAddress) {
+        return [];
+    }
+    
+    const roles = [];
+    
+    try {
+        // Check each role
+        const roleChecks = [
+            { name: 'Proposer', function: 'PROPOSER' },
+            { name: 'Canceller', function: 'CANCELLER' },
+            { name: 'Executor', function: 'EXECUTOR' }
+        ];
+        
+        for (const role of roleChecks) {
+            // Special handling for executor role (check for zero address case)
+            if (role.function === 'EXECUTOR') {
+                const hasExecutorPermission = await checkExecutorPermission();
+                if (hasExecutorPermission) {
+                    // Only add executor role if it's not the zero address case
+                    const executorRoleHash = await contract.EXECUTOR_ROLE();
+                    const executors = await getRoleMembersFromEvents(executorRoleHash);
+                    
+                    // Don't show "Executor" if zero address is the only executor (anyone can execute)
+                    if (!(executors.length === 1 && executors[0] === '0x0000000000000000000000000000000000000000')) {
+                        const hasDirectRole = await contract.hasRole(executorRoleHash, currentUserAddress);
+                        if (hasDirectRole) {
+                            roles.push(role.name);
+                        }
+                    }
+                }
+            } else {
+                const hasRole = await checkUserRole(role.function);
+                if (hasRole) {
+                    roles.push(role.name);
+                }
+            }
+        }
+        
+        // Check for recovery role (RECOVERER_ROLE)
+        const recovererRoleHash = await contract.RECOVERER_ROLE();
+        const hasRecovererRole = await contract.hasRole(recovererRoleHash, currentUserAddress);
+        if (hasRecovererRole) {
+            roles.push('Recoverer');
+        }
+        
+    } catch (error) {
+        console.error('Error getting user roles:', error);
+    }
+    
+    return roles;
+}
+
 // Special executor permission checking (handles zero address case)
 async function checkExecutorPermission() {
     if (!contract || !currentUserAddress) {
@@ -1934,6 +2013,9 @@ async function updateButtonStates() {
         window.userIsExecutor = isExecutor;
         window.userIsRecoveryTriggerer = isRecoveryTriggerer;
         window.userIsRecoverer = isRecoverer;
+        
+        // Update connection status with current roles
+        await updateConnectionStatus();
         
     } catch (error) {
         console.error('Error updating button states:', error);
@@ -2418,6 +2500,9 @@ async function grantRoleToAddress(roleFunction, roleName) {
         // Refresh the recovery role management UI
         await loadRecoveryRoleManagement();
         hideGrantRoleForm(roleFunction);
+        
+        // Update connection status in case the current user's roles changed
+        await updateConnectionStatus();
 
     } catch (error) {
         console.error('Error granting role:', error);
@@ -2463,6 +2548,9 @@ async function revokeRoleFromMember(roleFunction, memberAddress) {
         
         // Refresh the recovery role management UI
         await loadRecoveryRoleManagement();
+        
+        // Update connection status in case the current user's roles changed
+        await updateConnectionStatus();
 
     } catch (error) {
         console.error('Error revoking role:', error);
