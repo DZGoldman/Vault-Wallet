@@ -274,6 +274,10 @@ function disconnectWallet() {
     lastEventsHash = null;
     lastOperationStatesHash = null;
     
+    // Reset role permissions
+    window.userIsCanceller = false;
+    window.userIsExecutor = false;
+    
     // Stop auto-refresh
     stopAutoRefresh();
     
@@ -738,7 +742,7 @@ async function loadRoleMembers() {
             const roleHash = await contract[roleInfo.roleFunction]();
             const members = await getRoleMembersFromEvents(roleHash);
             
-            displayRoleMembers(roleInfo.listId, roleInfo.loadingId, members);
+            displayRoleMembers(roleInfo.listId, roleInfo.loadingId, members, roleInfo.name);
         } catch (error) {
             console.error(`Failed to load ${roleInfo.name}:`, error);
             document.getElementById(roleInfo.loadingId).textContent = 'Error loading';
@@ -785,7 +789,7 @@ async function getRoleMembersFromEvents(roleHash) {
     }
 }
 
-function displayRoleMembers(listId, loadingId, members) {
+function displayRoleMembers(listId, loadingId, members, roleName) {
     const loadingElement = document.getElementById(loadingId);
     const listElement = document.getElementById(listId);
     
@@ -793,7 +797,22 @@ function displayRoleMembers(listId, loadingId, members) {
     listElement.style.display = 'block';
     listElement.innerHTML = '';
     
-    if (members.length === 0) {
+    // Special case for executors with zero address
+    if (roleName === 'executors' && members.length === 1 && members[0] === '0x0000000000000000000000000000000000000000') {
+        const li = document.createElement('li');
+        li.className = 'address-item';
+        li.innerHTML = `
+            <div style="background-color: #e8f5e8; border-left: 4px solid #28a745; padding: 10px; border-radius: 4px; margin: 5px 0;">
+                <div style="font-weight: bold; color: #155724; margin-bottom: 5px;">
+                    🔓 Open Execution
+                </div>
+                <div style="color: #155724; font-size: 0.9em; line-height: 1.4;">
+                    The zero address (${members[0]}) is the only executor, which means <strong>anyone can execute</strong> ready operations.
+                </div>
+            </div>
+        `;
+        listElement.appendChild(li);
+    } else if (members.length === 0) {
         const li = document.createElement('li');
         li.className = 'address-item';
         li.textContent = 'No members (anyone can perform this role)';
@@ -1089,7 +1108,9 @@ function createOperationElement(operation) {
         ${operationDetails}
         <div class="operation-actions">
             ${operation.status === 'Ready' ? 
-                `<button class="execute-button" onclick="executeOperation('${operation.id}', ${JSON.stringify(operation.calls).replace(/"/g, '&quot;')}, '${operation.predecessor}', '${operation.salt}')">
+                `<button class="execute-button ${!window.userIsExecutor ? 'role-disabled' : ''}" 
+                         onclick="executeOperation('${operation.id}', ${JSON.stringify(operation.calls).replace(/"/g, '&quot;')}, '${operation.predecessor}', '${operation.salt}')"
+                         ${!window.userIsExecutor ? 'disabled title="Connect an executor account to execute operations (or check if executors are restricted)"' : ''}>
                     Execute
                 </button>` : 
                 ''
@@ -1326,10 +1347,43 @@ async function checkUserRole(roleName) {
     }
 }
 
+// Special executor permission checking (handles zero address case)
+async function checkExecutorPermission() {
+    if (!contract || !currentUserAddress) {
+        return false;
+    }
+    
+    try {
+        const executorRoleHash = await contract.EXECUTOR_ROLE();
+        
+        // Get all executor role members
+        const executors = await getRoleMembersFromEvents(executorRoleHash);
+        
+        console.log('Current executors:', executors);
+        
+        // Special case: if the only executor is the zero address, anyone can execute
+        if (executors.length === 1 && executors[0] === '0x0000000000000000000000000000000000000000') {
+            console.log('Zero address is the only executor - anyone can execute');
+            return true;
+        }
+        
+        // Otherwise, check if current user has the executor role
+        const hasExecutorRole = await contract.hasRole(executorRoleHash, currentUserAddress);
+        console.log(`User ${formatAddress(currentUserAddress)} has executor role: ${hasExecutorRole}`);
+        
+        return hasExecutorRole;
+        
+    } catch (error) {
+        console.error('Error checking executor permission:', error);
+        return false;
+    }
+}
+
 async function updateButtonStates() {
     if (!contract || !currentUserAddress) {
         // Reset to default disabled state when not connected
         window.userIsCanceller = false;
+        window.userIsExecutor = false;
         updateProposalButtons(false);
         return;
     }
@@ -1339,18 +1393,23 @@ async function updateButtonStates() {
         const isProposer = await checkUserRole('PROPOSER');
         const isCanceller = await checkUserRole('CANCELLER');
         
-        console.log(`Role check for ${formatAddress(currentUserAddress)}: Proposer=${isProposer}, Canceller=${isCanceller}`);
+        // Check executor permissions (special case for zero address)
+        const isExecutor = await checkExecutorPermission();
+        
+        console.log(`Role check for ${formatAddress(currentUserAddress)}: Proposer=${isProposer}, Canceller=${isCanceller}, Executor=${isExecutor}`);
         
         // Update propose buttons
         updateProposalButtons(isProposer);
         
-        // Store canceller status for cancel buttons
+        // Store role status for buttons
         window.userIsCanceller = isCanceller;
+        window.userIsExecutor = isExecutor;
         
     } catch (error) {
         console.error('Error updating button states:', error);
         // Default to no permissions on error
         window.userIsCanceller = false;
+        window.userIsExecutor = false;
         updateProposalButtons(false);
     }
 }
