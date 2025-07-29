@@ -425,6 +425,9 @@ function switchMainTab(tabType) {
         } else if (tabType === 'operations') {
             targetTab = document.getElementById('operationsTab');
             targetSection = document.getElementById('operationsSection');
+        } else if (tabType === 'recoveryPanel') {
+            targetTab = document.getElementById('recoveryPanelTab');
+            targetSection = document.getElementById('recoveryPanelSection');
         }
         
         console.log('Target elements found:', !!targetTab, !!targetSection);
@@ -906,18 +909,24 @@ async function handleRecoveryModeUI(isRecoveryMode) {
     // Track recovery mode status globally
     window.isInRecoveryMode = isRecoveryMode;
     
-    const recoveryModeSection = document.getElementById('recoveryModeSection');
     const createTransactionTab = document.getElementById('createTransactionTab');
+    const recoveryPanelTab = document.getElementById('recoveryPanelTab');
+    const recoveryTriggerSection = document.querySelector('.recovery-trigger-section');
     const roleAssignmentsSection = document.getElementById('roleAssignmentsSection');
     const infoSectionsContainer = document.querySelector('.info-sections-container');
     
     if (isRecoveryMode) {
-        // Show recovery mode UI
-        recoveryModeSection.style.display = 'block';
+        // Show Recovery Panel tab
+        recoveryPanelTab.style.display = 'flex';
         
         // Disable create transaction tab
         createTransactionTab.classList.add('disabled');
         createTransactionTab.title = 'Transaction creation is disabled during recovery mode';
+        
+        // Hide recovery trigger button
+        if (recoveryTriggerSection) {
+            recoveryTriggerSection.style.display = 'none';
+        }
         
         // Hide role assignments section in dashboard
         if (roleAssignmentsSection) {
@@ -929,10 +938,14 @@ async function handleRecoveryModeUI(isRecoveryMode) {
             infoSectionsContainer.classList.add('recovery-mode');
         }
         
-        // Switch to dashboard if currently on create transaction tab
+        // Switch to Recovery Panel as default, or if currently on create transaction tab
         const createTransactionSection = document.getElementById('createTransactionSection');
-        if (createTransactionSection && createTransactionSection.classList.contains('active')) {
-            switchMainTab('dashboard');
+        const currentActiveSection = document.querySelector('.main-section.active');
+        
+        if (!currentActiveSection || 
+            createTransactionSection.classList.contains('active') ||
+            currentActiveSection.id === 'dashboardSection') {
+            switchMainTab('recoveryPanel');
         }
         
         // Load recovery mode role management
@@ -941,12 +954,17 @@ async function handleRecoveryModeUI(isRecoveryMode) {
         // Update recovery mode button states
         await updateRecoveryModeButtons();
     } else {
-        // Hide recovery mode UI
-        recoveryModeSection.style.display = 'none';
+        // Hide Recovery Panel tab
+        recoveryPanelTab.style.display = 'none';
         
         // Enable create transaction tab
         createTransactionTab.classList.remove('disabled');
         createTransactionTab.title = '';
+        
+        // Show recovery trigger button
+        if (recoveryTriggerSection) {
+            recoveryTriggerSection.style.display = 'flex';
+        }
         
         // Show role assignments section in dashboard
         if (roleAssignmentsSection) {
@@ -956,6 +974,12 @@ async function handleRecoveryModeUI(isRecoveryMode) {
         // Restore three-column layout in dashboard
         if (infoSectionsContainer) {
             infoSectionsContainer.classList.remove('recovery-mode');
+        }
+        
+        // Switch to dashboard if currently on recovery panel
+        const recoveryPanelSection = document.getElementById('recoveryPanelSection');
+        if (recoveryPanelSection && recoveryPanelSection.classList.contains('active')) {
+            switchMainTab('dashboard');
         }
     }
 }

@@ -123,13 +123,18 @@ h1 {
     margin-bottom: 30px;
 }
 
-/* Two-column centered layout when role assignments are hidden (recovery mode) */
+/* Recovery mode styling - two column layout */
 .info-sections-container.recovery-mode {
     grid-template-columns: 1fr 1fr;
-    justify-content: center;
-    max-width: 800px;
-    margin-left: auto;
-    margin-right: auto;
+}
+
+/* Recovery Panel section styling */
+#recoveryPanelSection {
+    padding: 20px;
+}
+
+#recoveryPanelSection .section-card {
+    margin-bottom: 20px;
 }
 
 .info-section {

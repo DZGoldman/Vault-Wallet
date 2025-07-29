@@ -29,6 +29,9 @@
                     Operations
                     <span class="pending-indicator" id="pendingIndicator" style="display: none;">pending</span>
                 </button>
+                <button class="toolbar-tab" id="recoveryPanelTab" onclick="switchMainTab('recoveryPanel')" style="display: none;">
+                    🚨 Recovery Panel
+                </button>
             </div>
 
             <!-- Dashboard Section -->
@@ -234,8 +237,8 @@
             </div>
         </div> <!-- End Operations Section -->
 
-        <!-- Recovery Mode Management (only visible when in recovery mode) -->
-        <div id="recoveryModeSection" class="recovery-mode-section" style="display: none;">
+        <!-- Recovery Panel Section (only visible when in recovery mode) -->
+        <div class="main-section" id="recoveryPanelSection">
             <div class="recovery-mode-header">
                 <h2>🚨 RECOVERY MODE ACTIVE</h2>
                 <p>All timelock delays are bypassed. Only recoverers can perform actions.</p>
