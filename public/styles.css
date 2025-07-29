@@ -16,6 +16,24 @@ body {
     border: 1px solid rgba(148, 163, 184, 0.1);
     padding: 30px;
     margin-bottom: 20px;
+    position: relative;
+}
+
+#connection-section {
+    position: absolute;
+    top: 20px;
+    right: 30px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+.connection-status {
+    color: #94a3b8;
+    font-size: 0.9em;
+    white-space: nowrap;
+    font-weight: 500;
 }
 
 h1 {
@@ -24,6 +42,8 @@ h1 {
     text-align: center;
     font-weight: 600;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    margin-top: 0;
+    padding-top: 10px;
 }
 
 /* Three-column horizontal layout for info sections */
@@ -78,6 +98,21 @@ h1 {
     .info-sections-container {
         grid-template-columns: 1fr;
         gap: 15px;
+    }
+}
+
+@media (max-width: 768px) {
+    #connection-section {
+        position: static;
+        justify-content: center;
+        margin-bottom: 20px;
+        flex-direction: column;
+        gap: 8px;
+        align-items: center;
+    }
+    
+    h1 {
+        padding-top: 0;
     }
 }
 
