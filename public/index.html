@@ -17,74 +17,82 @@
         </div>
         
         <div id="contract-info" style="display: none;">
-            <h2>Contract Information</h2>
-            
-            <div class="status-info">
-                <div class="status-item">
-                    <div class="status-label">Contract Address</div>
-                    <div class="status-value" id="contractAddress">-</div>
-                </div>
-                <div class="status-item">
-                    <div class="status-label">Min Delay</div>
-                    <div class="status-value" id="minDelay">-</div>
-                </div>
-                <div class="status-item">
-                    <div class="status-label">Recovery Mode</div>
-                    <div class="status-value" id="recoveryMode">-</div>
-                </div>
-                <div class="status-item">
-                    <div class="status-label">Recovery Epoch</div>
-                    <div class="status-value" id="recoveryEpoch">-</div>
-                </div>
-            </div>
-            
-            <h2>Contract Balance</h2>
-            
-            <div class="status-info">
-                <div class="status-item">
-                    <div class="status-label">ETH Balance</div>
-                    <div class="status-value" id="contractBalance">Loading...</div>
-                </div>
-            </div>
-            
-            <div class="status-info" id="tokenBalancesSection">
-                <div class="status-item">
-                    <div class="status-label">Token Balances</div>
-                    <div class="status-value" id="tokenBalances">Loading...</div>
-                </div>
-            </div>
-            
-            <h2>Role Assignments</h2>
-            
-            <div class="roles-section">
-                <div class="role-group">
-                    <div class="role-title">Proposers</div>
-                    <div class="loading" id="proposersLoading">Loading...</div>
-                    <ul class="address-list" id="proposersList" style="display: none;"></ul>
+            <!-- Three-column layout for compact info sections -->
+            <div class="info-sections-container">
+                <!-- Contract Information Section -->
+                <div class="info-section">
+                    <h2>Contract Information</h2>
+                    <div class="status-info">
+                        <div class="status-item">
+                            <div class="status-label">Contract Address</div>
+                            <div class="status-value" id="contractAddress">-</div>
+                        </div>
+                        <div class="status-item">
+                            <div class="status-label">Min Delay</div>
+                            <div class="status-value" id="minDelay">-</div>
+                        </div>
+                        <div class="status-item">
+                            <div class="status-label">Recovery Mode</div>
+                            <div class="status-value" id="recoveryMode">-</div>
+                        </div>
+                        <div class="status-item">
+                            <div class="status-label">Recovery Epoch</div>
+                            <div class="status-value" id="recoveryEpoch">-</div>
+                        </div>
+                    </div>
                 </div>
                 
-                <div class="role-group">
-                    <div class="role-title">Executors</div>
-                    <div class="loading" id="executorsLoading">Loading...</div>
-                    <ul class="address-list" id="executorsList" style="display: none;"></ul>
+                <!-- Contract Balance Section -->
+                <div class="info-section">
+                    <h2>Contract Balance</h2>
+                    <div class="status-info">
+                        <div class="status-item">
+                            <div class="status-label">ETH Balance</div>
+                            <div class="status-value" id="contractBalance">Loading...</div>
+                        </div>
+                    </div>
+                    <div class="status-info" id="tokenBalancesSection">
+                        <div class="status-item">
+                            <div class="status-label">Token Balances</div>
+                            <div class="status-value" id="tokenBalances">Loading...</div>
+                        </div>
+                    </div>
                 </div>
                 
-                <div class="role-group">
-                    <div class="role-title">Cancellers</div>
-                    <div class="loading" id="cancellersLoading">Loading...</div>
-                    <ul class="address-list" id="cancellersList" style="display: none;"></ul>
-                </div>
-                
-                <div class="role-group">
-                    <div class="role-title">Recovery Triggerers</div>
-                    <div class="loading" id="recoveryTriggerersLoading">Loading...</div>
-                    <ul class="address-list" id="recoveryTriggerersList" style="display: none;"></ul>
-                </div>
-                
-                <div class="role-group">
-                    <div class="role-title">Recoverers</div>
-                    <div class="loading" id="recoverersLoading">Loading...</div>
-                    <ul class="address-list" id="recoverersList" style="display: none;"></ul>
+                <!-- Role Assignments Section -->
+                <div class="info-section">
+                    <h2>Role Assignments</h2>
+                    <div class="roles-section">
+                        <div class="role-group">
+                            <div class="role-title">Proposers</div>
+                            <div class="loading" id="proposersLoading">Loading...</div>
+                            <ul class="address-list" id="proposersList" style="display: none;"></ul>
+                        </div>
+                        
+                        <div class="role-group">
+                            <div class="role-title">Executors</div>
+                            <div class="loading" id="executorsLoading">Loading...</div>
+                            <ul class="address-list" id="executorsList" style="display: none;"></ul>
+                        </div>
+                        
+                        <div class="role-group">
+                            <div class="role-title">Cancellers</div>
+                            <div class="loading" id="cancellersLoading">Loading...</div>
+                            <ul class="address-list" id="cancellersList" style="display: none;"></ul>
+                        </div>
+                        
+                        <div class="role-group">
+                            <div class="role-title">Recovery Triggerers</div>
+                            <div class="loading" id="recoveryTriggerersLoading">Loading...</div>
+                            <ul class="address-list" id="recoveryTriggerersList" style="display: none;"></ul>
+                        </div>
+                        
+                        <div class="role-group">
+                            <div class="role-title">Recoverers</div>
+                            <div class="loading" id="recoverersLoading">Loading...</div>
+                            <ul class="address-list" id="recoverersList" style="display: none;"></ul>
+                        </div>
+                    </div>
                 </div>
             </div>
             
