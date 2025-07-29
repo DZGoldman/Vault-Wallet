@@ -76,6 +76,7 @@ const ERC20_ABI = [
 
 let provider;
 let contract;
+let currentUserAddress = null; // Track current connected user
 let autoRefreshInterval = null;
 let balanceRefreshInterval = null;
 
@@ -191,6 +192,7 @@ async function connectWallet() {
         provider = new ethers.providers.Web3Provider(window.ethereum);
         const signer = provider.getSigner();
         const userAddress = await signer.getAddress();
+        currentUserAddress = userAddress; // Store current user address
         console.log('userAddress', userAddress);
         console.log('accounts', accounts);
         
@@ -206,6 +208,9 @@ async function connectWallet() {
         contractInfo.style.display = 'block';
         await loadContractData();
         
+        // Update button states based on user roles
+        await updateButtonStates();
+        
         // Listen for account changes
         window.ethereum.on('accountsChanged', async (accounts) => {
             if (accounts.length === 0) {
@@ -217,11 +222,15 @@ async function connectWallet() {
                 try {
                     const signer = provider.getSigner();
                     const newAddress = await signer.getAddress();
+                    currentUserAddress = newAddress; // Update current user address
                     connectionStatus.classList.remove('loading');
                     connectionStatus.textContent = `Connected: ${newAddress.slice(0, 6)}...${newAddress.slice(-4)}`;
                     
                     // Reload contract data for new account
                     await loadContractData();
+                    
+                    // Update button states for new account
+                    await updateButtonStates();
                 } catch (error) {
                     console.error('Error handling account change:', error);
                     // If we can't get the new account, disconnect
@@ -254,6 +263,7 @@ function disconnectWallet() {
     // Reset UI state
     provider = null;
     contract = null;
+    currentUserAddress = null; // Clear current user address
     
     // Reset event data
     lastQueriedBlock = 0;
@@ -636,6 +646,9 @@ async function loadContractData() {
         // Load role assignments
         await loadRoleMembers();
         
+        // Ensure button states are updated before loading operations
+        await updateButtonStates();
+        
         // Load scheduled operations
         await loadScheduledOperations();
         
@@ -995,7 +1008,21 @@ async function loadScheduledOperations() {
 
         // Display operations (only if events changed)
         operationsLoading.style.display = 'none';
-        operationsCount.textContent = `${operations.length} operation${operations.length !== 1 ? 's' : ''}`;
+        
+        // Count pending operations (Waiting or Ready)
+        const pendingOperations = operations.filter(op => op.status === 'Waiting' || op.status === 'Ready');
+        const pendingCount = pendingOperations.length;
+        
+        // Update operations count display based on pending status
+        if (pendingCount > 0) {
+            // Show pending operations with emphasis
+            operationsCount.textContent = `${pendingCount} pending operation${pendingCount !== 1 ? 's' : ''}`;
+            operationsCount.className = 'operations-count pending';
+        } else {
+            // Show total operations count, subdued style
+            operationsCount.textContent = `${operations.length} operation${operations.length !== 1 ? 's' : ''}`;
+            operationsCount.className = 'operations-count total';
+        }
 
         if (operations.length === 0) {
             noOperations.style.display = 'block';
@@ -1068,7 +1095,9 @@ function createOperationElement(operation) {
                 ''
             }
             ${(operation.status === 'Waiting' || operation.status === 'Ready') ? 
-                `<button class="cancel-button" onclick="cancelOperation('${operation.id}')">
+                `<button class="cancel-button ${!window.userIsCanceller ? 'role-disabled' : ''}" 
+                         onclick="cancelOperation('${operation.id}')"
+                         ${!window.userIsCanceller ? 'disabled title="Connect a canceller account to cancel operations"' : ''}>
                     Cancel
                 </button>` : 
                 ''
@@ -1280,6 +1309,71 @@ function createGenericTransactionDisplay(operation) {
 // Helper function to format addresses for display
 function formatAddress(address) {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
+// Role checking functions
+async function checkUserRole(roleName) {
+    if (!contract || !currentUserAddress) {
+        return false;
+    }
+    
+    try {
+        const roleHash = await contract[`${roleName}_ROLE`]();
+        return await contract.hasRole(roleHash, currentUserAddress);
+    } catch (error) {
+        console.error(`Error checking ${roleName} role:`, error);
+        return false;
+    }
+}
+
+async function updateButtonStates() {
+    if (!contract || !currentUserAddress) {
+        // Reset to default disabled state when not connected
+        window.userIsCanceller = false;
+        updateProposalButtons(false);
+        return;
+    }
+    
+    try {
+        // Check if user is a proposer
+        const isProposer = await checkUserRole('PROPOSER');
+        const isCanceller = await checkUserRole('CANCELLER');
+        
+        console.log(`Role check for ${formatAddress(currentUserAddress)}: Proposer=${isProposer}, Canceller=${isCanceller}`);
+        
+        // Update propose buttons
+        updateProposalButtons(isProposer);
+        
+        // Store canceller status for cancel buttons
+        window.userIsCanceller = isCanceller;
+        
+    } catch (error) {
+        console.error('Error updating button states:', error);
+        // Default to no permissions on error
+        window.userIsCanceller = false;
+        updateProposalButtons(false);
+    }
+}
+
+function updateProposalButtons(isProposer) {
+    const buttons = [proposeButton, proposeTokenTransferButton];
+    
+    buttons.forEach(button => {
+        if (button) {
+            if (!isProposer) {
+                button.disabled = true;
+                button.title = 'Connect a proposer account to schedule operations';
+                button.classList.add('role-disabled');
+            } else {
+                // Only enable if not disabled for other reasons
+                if (button.classList.contains('role-disabled')) {
+                    button.disabled = false;
+                    button.title = '';
+                    button.classList.remove('role-disabled');
+                }
+            }
+        }
+    });
 }
 
 async function cancelOperation(operationId) {
