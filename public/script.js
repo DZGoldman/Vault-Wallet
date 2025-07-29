@@ -48,6 +48,12 @@ const CONTRACT_ABI = [
     "function recoveryMode() view returns (bool)",
     "function currentRecoveryEpoch() view returns (uint256)",
     "function triggerRecoveryMode()",
+    "function exitRecoveryMode()",
+    "function cancelAllOperations()",
+    
+    // Role management functions
+    "function grantRole(bytes32 role, address account)",
+    "function revokeRole(bytes32 role, address account)",
     
     // Role constants
     "function PROPOSER_ROLE() view returns (bytes32)",
@@ -333,6 +339,20 @@ proposeTokenTransferButton.addEventListener('click', proposeTokenTransfer);
 
 // Recovery trigger event listener
 recoveryTriggerButton.addEventListener('click', triggerRecovery);
+
+// Recovery mode action event listeners
+document.addEventListener('DOMContentLoaded', () => {
+    const exitRecoveryButton = document.getElementById('exitRecoveryMode');
+    const cancelAllButton = document.getElementById('cancelAllOperations');
+    
+    if (exitRecoveryButton) {
+        exitRecoveryButton.addEventListener('click', exitRecoveryMode);
+    }
+    
+    if (cancelAllButton) {
+        cancelAllButton.addEventListener('click', cancelAllOperations);
+    }
+});
 
 // Tab switching functionality
 function switchTab(tabType) {
@@ -632,6 +652,132 @@ async function proposeTokenTransfer() {
     }
 }
 
+// Recovery mode UI management
+async function handleRecoveryModeUI(isRecoveryMode) {
+    const recoveryModeSection = document.getElementById('recoveryModeSection');
+    const normalModeSection = document.getElementById('normalModeSection');
+    const recoveryTriggerSection = document.querySelector('.recovery-trigger-section');
+    
+    if (isRecoveryMode) {
+        // Show recovery mode UI, hide normal transaction creation
+        recoveryModeSection.style.display = 'block';
+        normalModeSection.style.display = 'none';
+        recoveryTriggerSection.style.display = 'none';
+        
+        // Load recovery mode role management
+        await loadRecoveryRoleManagement();
+        
+        // Update recovery mode button states
+        await updateRecoveryModeButtons();
+    } else {
+        // Show normal UI, hide recovery mode
+        recoveryModeSection.style.display = 'none';
+        normalModeSection.style.display = 'block';
+        recoveryTriggerSection.style.display = 'block';
+    }
+}
+
+// Check if user is a recoverer
+async function checkRecovererPermission() {
+    if (!contract || !currentUserAddress) {
+        return false;
+    }
+    
+    try {
+        const recovererRoleHash = await contract.RECOVERER_ROLE();
+        const hasRecovererRole = await contract.hasRole(recovererRoleHash, currentUserAddress);
+        console.log(`User ${formatAddress(currentUserAddress)} has recoverer role: ${hasRecovererRole}`);
+        
+        return hasRecovererRole;
+    } catch (error) {
+        console.error('Error checking recoverer permission:', error);
+        return false;
+    }
+}
+
+// Update recovery mode button states
+async function updateRecoveryModeButtons() {
+    const isRecoverer = await checkRecovererPermission();
+    const exitRecoveryButton = document.getElementById('exitRecoveryMode');
+    const cancelAllButton = document.getElementById('cancelAllOperations');
+    
+    [exitRecoveryButton, cancelAllButton].forEach(button => {
+        if (button) {
+            if (!isRecoverer) {
+                button.disabled = true;
+                button.title = 'Only recoverers can perform this action';
+            } else {
+                button.disabled = false;
+                button.title = '';
+            }
+        }
+    });
+}
+
+// Load recovery role management UI
+async function loadRecoveryRoleManagement() {
+    const recoveryRolesContainer = document.getElementById('recoveryRolesList');
+    const isRecoverer = await checkRecovererPermission();
+    
+    const roles = [
+        { name: 'Proposers', roleFunction: 'PROPOSER_ROLE' },
+        { name: 'Executors', roleFunction: 'EXECUTOR_ROLE' },
+        { name: 'Cancellers', roleFunction: 'CANCELLER_ROLE' },
+        { name: 'Recovery Triggerers', roleFunction: 'RECOVERY_TRIGGER_ROLE' },
+        { name: 'Recoverers', roleFunction: 'RECOVERER_ROLE' }
+    ];
+    
+    recoveryRolesContainer.innerHTML = '';
+    
+    for (const roleInfo of roles) {
+        try {
+            const roleHash = await contract[roleInfo.roleFunction]();
+            const members = await getRoleMembersFromEvents(roleHash);
+            
+            const roleGroupDiv = document.createElement('div');
+            roleGroupDiv.className = 'recovery-role-group';
+            
+            roleGroupDiv.innerHTML = `
+                <div class="recovery-role-title">
+                    ${roleInfo.name}
+                    <button class="grant-role-button" onclick="showGrantRoleForm('${roleInfo.roleFunction}', '${roleInfo.name}')" 
+                            ${!isRecoverer ? 'disabled title="Only recoverers can grant roles"' : ''}>
+                        + Grant Role
+                    </button>
+                </div>
+                <div class="recovery-role-members" id="recovery-${roleInfo.roleFunction}-members">
+                    ${members.length === 0 ? 
+                        '<div style="color: #64748b; font-style: italic;">No members</div>' : 
+                        members.map(member => `
+                            <div class="recovery-role-member">
+                                <span class="recovery-member-address">${member}</span>
+                                <button class="revoke-role-button" onclick="revokeRoleFromMember('${roleInfo.roleFunction}', '${member}')"
+                                        ${!isRecoverer ? 'disabled title="Only recoverers can revoke roles"' : ''}>
+                                    Revoke
+                                </button>
+                            </div>
+                        `).join('')
+                    }
+                </div>
+                <div class="grant-role-form" id="grant-${roleInfo.roleFunction}-form" style="display: none;">
+                    <input type="text" class="grant-role-input" id="grant-${roleInfo.roleFunction}-address" 
+                           placeholder="0x... address to grant ${roleInfo.name} role">
+                    <button class="grant-role-button" onclick="grantRoleToAddress('${roleInfo.roleFunction}', '${roleInfo.name}')">
+                        Grant
+                    </button>
+                    <button class="revoke-role-button" onclick="hideGrantRoleForm('${roleInfo.roleFunction}')">
+                        Cancel
+                    </button>
+                </div>
+            `;
+            
+            recoveryRolesContainer.appendChild(roleGroupDiv);
+        } catch (error) {
+            console.error(`Failed to load recovery role ${roleInfo.name}:`, error);
+        }
+    }
+}
+
 async function loadContractData() {
     
     try {
@@ -647,6 +793,9 @@ async function loadContractData() {
             
         const recoveryEpoch = await contract.currentRecoveryEpoch();
         document.getElementById('recoveryEpoch').textContent = recoveryEpoch.toString();
+        
+        // Handle recovery mode UI switching
+        await handleRecoveryModeUI(recoveryMode);
         
         // Load contract balance
         await loadContractBalance();
@@ -1762,6 +1911,220 @@ async function triggerRecovery() {
     } finally {
         recoveryTriggerButton.disabled = false;
         recoveryTriggerButton.textContent = '🚨 TRIGGER RECOVERY MODE';
+    }
+}
+
+// Exit recovery mode
+async function exitRecoveryMode() {
+    if (!contract || !provider) {
+        showError('Please connect your wallet first.');
+        return;
+    }
+
+    const hasPermission = await checkRecovererPermission();
+    if (!hasPermission) {
+        showError('You do not have permission to exit recovery mode.');
+        return;
+    }
+
+    const confirmed = confirm('Are you sure you want to exit recovery mode?\n\nThis will restore normal timelock delays for all future operations.');
+    if (!confirmed) return;
+
+    try {
+        const exitButton = document.getElementById('exitRecoveryMode');
+        exitButton.disabled = true;
+        exitButton.textContent = 'Exiting Recovery Mode...';
+
+        const signer = provider.getSigner();
+        const contractWithSigner = contract.connect(signer);
+        const tx = await contractWithSigner.exitRecoveryMode();
+        
+        console.log('Exit recovery transaction sent:', tx.hash);
+        const receipt = await tx.wait();
+        console.log('Recovery mode exited successfully:', receipt);
+
+        alert('✅ Recovery mode exited successfully!\n\nNormal timelock delays are now restored.');
+        await loadContractData();
+
+    } catch (error) {
+        console.error('Error exiting recovery mode:', error);
+        let errorMsg = 'Failed to exit recovery mode.';
+        
+        if (error.message.includes('user rejected')) {
+            errorMsg = 'Transaction rejected by user.';
+        } else if (error.message.includes('AccessControl')) {
+            errorMsg = 'Access denied: You do not have recoverer permissions.';
+        }
+        
+        showError(errorMsg);
+    } finally {
+        const exitButton = document.getElementById('exitRecoveryMode');
+        exitButton.disabled = false;
+        exitButton.textContent = '🔒 EXIT RECOVERY MODE';
+    }
+}
+
+// Cancel all operations
+async function cancelAllOperations() {
+    if (!contract || !provider) {
+        showError('Please connect your wallet first.');
+        return;
+    }
+
+    const hasPermission = await checkRecovererPermission();
+    if (!hasPermission) {
+        showError('You do not have permission to cancel all operations.');
+        return;
+    }
+
+    const confirmed = confirm('⚠️ WARNING: This will cancel ALL pending operations!\n\nThis action cannot be undone. Are you sure?');
+    if (!confirmed) return;
+
+    try {
+        const cancelButton = document.getElementById('cancelAllOperations');
+        cancelButton.disabled = true;
+        cancelButton.textContent = 'Cancelling All Operations...';
+
+        const signer = provider.getSigner();
+        const contractWithSigner = contract.connect(signer);
+        const tx = await contractWithSigner.cancelAllOperations();
+        
+        console.log('Cancel all operations transaction sent:', tx.hash);
+        const receipt = await tx.wait();
+        console.log('All operations cancelled successfully:', receipt);
+
+        alert('✅ All pending operations have been cancelled!');
+        await loadScheduledOperations();
+
+    } catch (error) {
+        console.error('Error cancelling all operations:', error);
+        let errorMsg = 'Failed to cancel all operations.';
+        
+        if (error.message.includes('user rejected')) {
+            errorMsg = 'Transaction rejected by user.';
+        } else if (error.message.includes('AccessControl')) {
+            errorMsg = 'Access denied: You do not have recoverer permissions.';
+        }
+        
+        showError(errorMsg);
+    } finally {
+        const cancelButton = document.getElementById('cancelAllOperations');
+        cancelButton.disabled = false;
+        cancelButton.textContent = '❌ CANCEL ALL OPERATIONS';
+    }
+}
+
+// Role management functions
+function showGrantRoleForm(roleFunction, roleName) {
+    const form = document.getElementById(`grant-${roleFunction}-form`);
+    form.style.display = 'flex';
+    document.getElementById(`grant-${roleFunction}-address`).focus();
+}
+
+function hideGrantRoleForm(roleFunction) {
+    const form = document.getElementById(`grant-${roleFunction}-form`);
+    form.style.display = 'none';
+    document.getElementById(`grant-${roleFunction}-address`).value = '';
+}
+
+async function grantRoleToAddress(roleFunction, roleName) {
+    if (!contract || !provider) {
+        showError('Please connect your wallet first.');
+        return;
+    }
+
+    const hasPermission = await checkRecovererPermission();
+    if (!hasPermission) {
+        showError('You do not have permission to grant roles.');
+        return;
+    }
+
+    const addressInput = document.getElementById(`grant-${roleFunction}-address`);
+    const address = addressInput.value.trim();
+
+    if (!address) {
+        showError('Please enter an address.');
+        return;
+    }
+
+    if (!ethers.utils.isAddress(address)) {
+        showError('Invalid address format.');
+        return;
+    }
+
+    try {
+        const signer = provider.getSigner();
+        const contractWithSigner = contract.connect(signer);
+        const roleHash = await contract[roleFunction]();
+        
+        const tx = await contractWithSigner.grantRole(roleHash, address);
+        console.log('Grant role transaction sent:', tx.hash);
+        
+        const receipt = await tx.wait();
+        console.log('Role granted successfully:', receipt);
+
+        alert(`✅ ${roleName} role granted to ${formatAddress(address)}`);
+        
+        // Refresh the recovery role management UI
+        await loadRecoveryRoleManagement();
+        hideGrantRoleForm(roleFunction);
+
+    } catch (error) {
+        console.error('Error granting role:', error);
+        let errorMsg = 'Failed to grant role.';
+        
+        if (error.message.includes('user rejected')) {
+            errorMsg = 'Transaction rejected by user.';
+        } else if (error.message.includes('AccessControl')) {
+            errorMsg = 'Access denied: You do not have recoverer permissions.';
+        }
+        
+        showError(errorMsg);
+    }
+}
+
+async function revokeRoleFromMember(roleFunction, memberAddress) {
+    if (!contract || !provider) {
+        showError('Please connect your wallet first.');
+        return;
+    }
+
+    const hasPermission = await checkRecovererPermission();
+    if (!hasPermission) {
+        showError('You do not have permission to revoke roles.');
+        return;
+    }
+
+    const confirmed = confirm(`Are you sure you want to revoke the role from ${formatAddress(memberAddress)}?`);
+    if (!confirmed) return;
+
+    try {
+        const signer = provider.getSigner();
+        const contractWithSigner = contract.connect(signer);
+        const roleHash = await contract[roleFunction]();
+        
+        const tx = await contractWithSigner.revokeRole(roleHash, memberAddress);
+        console.log('Revoke role transaction sent:', tx.hash);
+        
+        const receipt = await tx.wait();
+        console.log('Role revoked successfully:', receipt);
+
+        alert(`✅ Role revoked from ${formatAddress(memberAddress)}`);
+        
+        // Refresh the recovery role management UI
+        await loadRecoveryRoleManagement();
+
+    } catch (error) {
+        console.error('Error revoking role:', error);
+        let errorMsg = 'Failed to revoke role.';
+        
+        if (error.message.includes('user rejected')) {
+            errorMsg = 'Transaction rejected by user.';
+        } else if (error.message.includes('AccessControl')) {
+            errorMsg = 'Access denied: You do not have recoverer permissions.';
+        }
+        
+        showError(errorMsg);
     }
 }
 

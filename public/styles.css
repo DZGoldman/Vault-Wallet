@@ -373,6 +373,218 @@ button {
     }
 }
 
+/* Recovery Mode Section Styles */
+.recovery-mode-section {
+    background: linear-gradient(135deg, rgba(220, 38, 38, 0.15) 0%, rgba(185, 28, 28, 0.1) 100%);
+    border: 2px solid #dc2626;
+    border-radius: 12px;
+    padding: 25px;
+    margin: 25px 0;
+    box-shadow: 0 8px 32px rgba(220, 38, 38, 0.2);
+    backdrop-filter: blur(10px);
+}
+
+.recovery-mode-header {
+    text-align: center;
+    margin-bottom: 25px;
+}
+
+.recovery-mode-header h2 {
+    color: #fca5a5;
+    font-size: 1.8em;
+    margin: 0 0 10px 0;
+    font-weight: 700;
+    text-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
+}
+
+.recovery-mode-header p {
+    color: #f1f5f9;
+    font-size: 1.1em;
+    margin: 0;
+    opacity: 0.9;
+}
+
+.recovery-actions {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    margin-bottom: 30px;
+    flex-wrap: wrap;
+}
+
+.recovery-action-button {
+    padding: 12px 24px;
+    border: 2px solid;
+    border-radius: 8px;
+    font-size: 1em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    backdrop-filter: blur(10px);
+}
+
+.recovery-action-button.exit-recovery {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.2) 0%, rgba(21, 128, 61, 0.3) 100%);
+    color: #86efac;
+    border-color: #22c55e;
+}
+
+.recovery-action-button.exit-recovery:hover:not(:disabled) {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.3) 0%, rgba(21, 128, 61, 0.4) 100%);
+    box-shadow: 0 6px 20px rgba(34, 197, 94, 0.3);
+    transform: translateY(-2px);
+}
+
+.recovery-action-button.cancel-all {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(185, 28, 28, 0.3) 100%);
+    color: #fca5a5;
+    border-color: #ef4444;
+}
+
+.recovery-action-button.cancel-all:hover:not(:disabled) {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.3) 0%, rgba(185, 28, 28, 0.4) 100%);
+    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.3);
+    transform: translateY(-2px);
+}
+
+.recovery-action-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+.recovery-role-management {
+    margin-top: 25px;
+}
+
+.recovery-role-management h3 {
+    color: #f1f5f9;
+    font-size: 1.3em;
+    margin-bottom: 20px;
+    text-align: center;
+    font-weight: 600;
+}
+
+.recovery-roles-container {
+    display: grid;
+    gap: 20px;
+}
+
+.recovery-role-group {
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 10px;
+    padding: 20px;
+    backdrop-filter: blur(10px);
+}
+
+.recovery-role-title {
+    color: #38bdf8;
+    font-size: 1.1em;
+    font-weight: 600;
+    margin-bottom: 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.grant-role-button {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.2) 0%, rgba(21, 128, 61, 0.3) 100%);
+    color: #86efac;
+    border: 1px solid #22c55e;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 0.85em;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: 500;
+}
+
+.grant-role-button:hover:not(:disabled) {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.3) 0%, rgba(21, 128, 61, 0.4) 100%);
+    box-shadow: 0 4px 12px rgba(34, 197, 94, 0.2);
+}
+
+.grant-role-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.recovery-role-members {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.recovery-role-member {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(15, 23, 42, 0.6);
+    padding: 12px 15px;
+    border-radius: 8px;
+    border: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.recovery-member-address {
+    font-family: 'Courier New', monospace;
+    color: #e2e8f0;
+    font-size: 0.9em;
+}
+
+.revoke-role-button {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(185, 28, 28, 0.3) 100%);
+    color: #fca5a5;
+    border: 1px solid #ef4444;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 0.8em;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: 500;
+}
+
+.revoke-role-button:hover:not(:disabled) {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.3) 0%, rgba(185, 28, 28, 0.4) 100%);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
+}
+
+.revoke-role-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.grant-role-form {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+    align-items: center;
+}
+
+.grant-role-input {
+    flex: 1;
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: #e2e8f0;
+    font-size: 0.9em;
+    font-family: 'Courier New', monospace;
+}
+
+.grant-role-input:focus {
+    outline: none;
+    border-color: #38bdf8;
+    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+}
+
+.grant-role-input::placeholder {
+    color: #64748b;
+}
+
 .transaction-form {
     background: rgba(30, 41, 59, 0.8);
     border: 1px solid rgba(148, 163, 184, 0.2);
