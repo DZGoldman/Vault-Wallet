@@ -135,7 +135,7 @@ const recoveryTriggerButton = document.getElementById('triggerRecovery');
 
 // Token list with deployed test tokens
 const SUPPORTED_TOKENS = [
-    { name: "Dancoin", symbol: "DAN", address: "0xbdEd0D2bf404bdcBa897a74E6657f1f12e5C6fb6", decimals: 18 },
+    // { name: "Dancoin", symbol: "DAN", address: "0xbdEd0D2bf404bdcBa897a74E6657f1f12e5C6fb6", decimals: 18 },
     { name: "GoldToken", symbol: "GOLD", address: "0xA7918D253764E42d60C3ce2010a34d5a1e7C1398", decimals: 18 },
     { name: "AnnoyingDecimals", symbol: "FU", address: "0x71a9d115E322467147391c4a71D85F8e1cA623EF", decimals: 6 }
 ];
@@ -344,6 +344,16 @@ proposeTokenTransferButton.addEventListener('click', proposeTokenTransfer);
 // Recovery trigger event listener
 recoveryTriggerButton.addEventListener('click', triggerRecovery);
 
+// Add token event listener
+const addTokenButton = document.getElementById('addTokenButton');
+const newTokenAddressInput = document.getElementById('newTokenAddress');
+addTokenButton.addEventListener('click', addNewToken);
+newTokenAddressInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        addNewToken();
+    }
+});
+
 // Recovery mode action event listeners
 document.addEventListener('DOMContentLoaded', () => {
     const exitRecoveryButton = document.getElementById('exitRecoveryMode');
@@ -492,6 +502,174 @@ function disableTokenFields() {
 function showTokenError(message) {
     tokenError.textContent = message;
     tokenError.style.display = 'block';
+}
+
+// Add new token functionality
+function showAddTokenStatus(message, type) {
+    const statusElement = document.getElementById('addTokenStatus');
+    statusElement.textContent = message;
+    statusElement.className = `add-token-status ${type}`;
+    
+    // Scroll the status message into view if it's not visible
+    setTimeout(() => {
+        statusElement.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'nearest',
+            inline: 'nearest'
+        });
+    }, 100);
+}
+
+function hideAddTokenStatus() {
+    const statusElement = document.getElementById('addTokenStatus');
+    statusElement.style.display = 'none';
+}
+
+async function validateTokenContract(address) {
+    try {
+        const tokenContract = new ethers.Contract(address, ERC20_ABI, provider);
+        
+        // Try to get basic token info
+        const [name, symbol, decimals] = await Promise.all([
+            tokenContract.name(),
+            tokenContract.symbol(), 
+            tokenContract.decimals()
+        ]);
+        
+        // Validate the results make sense
+        if (typeof decimals !== 'number' || decimals < 0 || decimals > 77) {
+            throw new Error('Invalid token decimals');
+        }
+        
+        if (!symbol || symbol.trim() === '') {
+            throw new Error('Token has no symbol');
+        }
+        
+        return { name, symbol, decimals, address };
+    } catch (error) {
+        console.error('Token validation error:', error);
+        
+        // Provide more specific error messages
+        if (error.message.includes('CALL_EXCEPTION')) {
+            throw new Error('This address is not a valid ERC20 token contract');
+        } else if (error.message.includes('invalid address')) {
+            throw new Error('Invalid contract address');
+        } else if (error.message.includes('network error')) {
+            throw new Error('Network error - please try again');
+        } else if (error.message.includes('Invalid token decimals')) {
+            throw new Error('Token has invalid decimal configuration');
+        } else if (error.message.includes('Token has no symbol')) {
+            throw new Error('Token missing required symbol');
+        } else if (error.code === 'NETWORK_ERROR') {
+            throw new Error('Network connection failed - please check your connection');
+        } else if (error.code === -32000) {
+            throw new Error('Contract execution failed - this may not be a valid token');
+        } else {
+            throw new Error('Failed to validate token contract - ensure this is a valid ERC20 token address');
+        }
+    }
+}
+
+async function addNewToken() {
+    if (!provider) {
+        showAddTokenStatus('Please connect your wallet first', 'error');
+        return;
+    }
+
+    const addressInput = document.getElementById('newTokenAddress');
+    const address = addressInput.value.trim();
+    
+    if (!address) {
+        showAddTokenStatus('Please enter a token address', 'error');
+        return;
+    }
+    
+    if (!ethers.utils.isAddress(address)) {
+        showAddTokenStatus('Invalid address format', 'error');
+        return;
+    }
+    
+    // Check if token already exists
+    const existingToken = SUPPORTED_TOKENS.find(token => 
+        token.address.toLowerCase() === address.toLowerCase()
+    );
+    
+    if (existingToken) {
+        showAddTokenStatus(`${existingToken.symbol} (${existingToken.name}) is already in the list`, 'error');
+        return;
+    }
+    
+    try {
+        const addButton = document.getElementById('addTokenButton');
+        addButton.disabled = true;
+        addButton.textContent = 'Validating...';
+        
+        showAddTokenStatus('Validating token contract...', 'loading');
+        
+        const tokenInfo = await validateTokenContract(address);
+        
+        // Add to SUPPORTED_TOKENS array
+        SUPPORTED_TOKENS.push({
+            name: tokenInfo.name,
+            symbol: tokenInfo.symbol,
+            address: tokenInfo.address,
+            decimals: tokenInfo.decimals
+        });
+        
+        showAddTokenStatus(`✅ Added ${tokenInfo.symbol} (${tokenInfo.name}) successfully!`, 'success');
+        
+        // Clear input
+        addressInput.value = '';
+        
+        // Refresh token balances to show the new token
+        await loadTokenBalances();
+        
+        // Refresh token dropdown for token transfers
+        initializeTokenList();
+        
+        // Auto-hide success message after 3 seconds
+        setTimeout(() => {
+            hideAddTokenStatus();
+        }, 3000);
+        
+    } catch (error) {
+        console.error('Error adding token:', error);
+        showAddTokenStatus(error.message || 'Failed to add token', 'error');
+    } finally {
+        const addButton = document.getElementById('addTokenButton');
+        addButton.disabled = false;
+        addButton.textContent = '+ Add Token';
+    }
+}
+
+// Remove token functionality
+function removeToken(tokenIndex) {
+    if (tokenIndex < 3) {
+        showAddTokenStatus('Cannot remove built-in tokens', 'error');
+        return;
+    }
+    
+    const token = SUPPORTED_TOKENS[tokenIndex];
+    if (!token) return;
+    
+    const confirmed = confirm(`Remove ${token.symbol} (${token.name}) from the token list?`);
+    if (!confirmed) return;
+    
+    // Remove from array
+    SUPPORTED_TOKENS.splice(tokenIndex, 1);
+    
+    showAddTokenStatus(`Removed ${token.symbol} from the list`, 'success');
+    
+    // Refresh token balances
+    loadTokenBalances();
+    
+    // Refresh token dropdown
+    initializeTokenList();
+    
+    // Auto-hide message
+    setTimeout(() => {
+        hideAddTokenStatus();
+    }, 2000);
 }
 
 // Token transfer proposal
@@ -862,7 +1040,7 @@ async function loadTokenBalances() {
             return;
         }
         
-        const balancePromises = SUPPORTED_TOKENS.map(async (token) => {
+        const balancePromises = SUPPORTED_TOKENS.map(async (token, index) => {
             try {
                 const tokenContract = new ethers.Contract(token.address, ERC20_ABI, provider);
                 const balance = await tokenContract.balanceOf(CONTRACT_ADDRESS);
@@ -875,28 +1053,46 @@ async function loadTokenBalances() {
                 });
                 
                 return {
+                    index,
                     symbol: token.symbol,
+                    name: token.name,
+                    address: token.address,
                     balance: displayBalance,
-                    hasBalance: !balance.isZero()
+                    hasBalance: !balance.isZero(),
+                    isDynamic: index >= 3 // First 3 are hardcoded tokens
                 };
             } catch (error) {
                 console.error(`Error loading balance for ${token.symbol}:`, error);
                 return {
+                    index,
                     symbol: token.symbol,
+                    name: token.name,
+                    address: token.address,
                     balance: 'Error',
-                    hasBalance: false
+                    hasBalance: false,
+                    isDynamic: index >= 3
                 };
             }
         });
         
         const balances = await Promise.all(balancePromises);
         
-        // Create the display string
+        // Create the display elements
         if (balances.length === 0) {
             tokenBalancesElement.textContent = 'No tokens';
         } else {
-            const balanceTexts = balances.map(b => `${b.balance} ${b.symbol}`);
-            tokenBalancesElement.innerHTML = balanceTexts.join('<br>');
+            // Create individual token balance elements with remove option for dynamic tokens
+            const tokenElements = balances.map(tokenData => {
+                const removeButton = tokenData.isDynamic ? 
+                    ` <button class="remove-token-button" onclick="removeToken(${tokenData.index})" title="Remove ${tokenData.symbol}">×</button>` : 
+                    '';
+                
+                return `<div class="token-balance-item" title="${tokenData.name} (${tokenData.address})">
+                    <span class="token-balance">${tokenData.balance} ${tokenData.symbol}</span>${removeButton}
+                </div>`;
+            });
+            
+            tokenBalancesElement.innerHTML = tokenElements.join('');
         }
         
     } catch (error) {
