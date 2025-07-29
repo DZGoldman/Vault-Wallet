@@ -107,6 +107,16 @@ h2 {
     color: #007bff;
 }
 
+#tokenBalances {
+    font-size: 0.95em;
+    line-height: 1.6;
+    font-family: 'Courier New', monospace;
+}
+
+#tokenBalances br {
+    margin: 2px 0;
+}
+
 .connect-button {
     background-color: #007bff;
     color: white;

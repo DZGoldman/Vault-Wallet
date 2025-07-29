@@ -103,7 +103,7 @@ npx hardhat run scripts/deploy.js --network localhost --help
 
 ```shell
 # Start Anvil in one terminal
-anvil --port 8545
+anvil --port 8546 --block-time 5
 
 # Deploy in another terminal
 npx hardhat run scripts/deploy.js --network localhost

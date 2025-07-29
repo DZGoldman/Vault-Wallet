@@ -65,6 +65,14 @@ const CONTRACT_ABI = [
     "event Cancelled(bytes32 indexed id)"
 ];
 
+// ERC20 ABI for token balance queries
+const ERC20_ABI = [
+    "function balanceOf(address owner) view returns (uint256)",
+    "function decimals() view returns (uint8)",
+    "function symbol() view returns (string)",
+    "function name() view returns (string)"
+];
+
 let provider;
 let contract;
 let autoRefreshInterval = null;
@@ -77,6 +85,7 @@ let allExecutedEvents = [];
 let allCancelledEvents = [];
 let allSaltEvents = [];
 let lastEventsHash = null;
+let lastOperationStatesHash = null;
 
 // DOM elements
 const connectButton = document.getElementById('connectWallet');
@@ -248,6 +257,7 @@ function disconnectWallet() {
     allCancelledEvents = [];
     allSaltEvents = [];
     lastEventsHash = null;
+    lastOperationStatesHash = null;
     
     // Stop auto-refresh
     stopAutoRefresh();
@@ -630,15 +640,68 @@ async function loadContractData() {
 
 async function loadContractBalance() {
     try {
-        
+        // Load ETH balance
         const balance = await provider.getBalance(CONTRACT_ADDRESS);
-        
-
         const balanceEth = ethers.utils.formatEther(balance);
         document.getElementById('contractBalance').textContent = `${balanceEth} ETH`;
+        
+        // Load token balances
+        await loadTokenBalances();
     } catch (error) {
         console.error('Failed to load contract balance:', error);
         document.getElementById('contractBalance').textContent = 'Error loading balance';
+    }
+}
+
+async function loadTokenBalances() {
+    try {
+        const tokenBalancesElement = document.getElementById('tokenBalances');
+        
+        if (SUPPORTED_TOKENS.length === 0) {
+            tokenBalancesElement.textContent = 'No tokens configured';
+            return;
+        }
+        
+        const balancePromises = SUPPORTED_TOKENS.map(async (token) => {
+            try {
+                const tokenContract = new ethers.Contract(token.address, ERC20_ABI, provider);
+                const balance = await tokenContract.balanceOf(CONTRACT_ADDRESS);
+                const formattedBalance = ethers.utils.formatUnits(balance, token.decimals);
+                
+                // Format the balance to avoid showing too many decimal places
+                const displayBalance = parseFloat(formattedBalance).toLocaleString(undefined, {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: token.decimals > 6 ? 6 : token.decimals
+                });
+                
+                return {
+                    symbol: token.symbol,
+                    balance: displayBalance,
+                    hasBalance: !balance.isZero()
+                };
+            } catch (error) {
+                console.error(`Error loading balance for ${token.symbol}:`, error);
+                return {
+                    symbol: token.symbol,
+                    balance: 'Error',
+                    hasBalance: false
+                };
+            }
+        });
+        
+        const balances = await Promise.all(balancePromises);
+        
+        // Create the display string
+        if (balances.length === 0) {
+            tokenBalancesElement.textContent = 'No tokens';
+        } else {
+            const balanceTexts = balances.map(b => `${b.balance} ${b.symbol}`);
+            tokenBalancesElement.innerHTML = balanceTexts.join('<br>');
+        }
+        
+    } catch (error) {
+        console.error('Failed to load token balances:', error);
+        document.getElementById('tokenBalances').textContent = 'Error loading token balances';
     }
 }
 
@@ -903,9 +966,14 @@ async function loadScheduledOperations() {
         const currentEventsHash = generateEventsHash();
         const eventsChanged = lastEventsHash !== currentEventsHash;
         
-        if (eventsChanged) {
-            console.log('Events changed, updating UI...');
+        // Also check if operation states have changed (e.g., from Waiting to Ready)
+        const operationStatesHash = await generateOperationStatesHash(Array.from(operationsMap.keys()));
+        const statesChanged = lastOperationStatesHash !== operationStatesHash;
+        
+        if (eventsChanged || statesChanged) {
+            console.log(`UI update needed - Events changed: ${eventsChanged}, States changed: ${statesChanged}`);
             lastEventsHash = currentEventsHash;
+            lastOperationStatesHash = operationStatesHash;
             
             // Show loading state only when rebuilding UI
             operationsLoading.style.display = 'block';
@@ -913,7 +981,7 @@ async function loadScheduledOperations() {
             noOperations.style.display = 'none';
             operationsCount.textContent = 'Loading...';
         } else {
-            console.log('No events changes detected, skipping UI update...');
+            console.log('No events or state changes detected, skipping UI update...');
             // Still need to re-enable refresh button
             refreshOperationsButton.disabled = false;
             return; // Skip UI rebuild
@@ -1403,6 +1471,7 @@ function resetEventData() {
     allCancelledEvents = [];
     allSaltEvents = [];
     lastEventsHash = null;
+    lastOperationStatesHash = null;
     console.log('Event data and UI state reset. Next loadScheduledOperations() call will query from block 0 and rebuild UI.');
 }
 
@@ -1430,4 +1499,39 @@ function generateEventsHash() {
         hash = hash & hash; // Convert to 32bit integer
     }
     return hash.toString();
+}
+
+// Helper function to generate a hash of operation states
+async function generateOperationStatesHash(operationIds) {
+    if (!contract || operationIds.length === 0) {
+        return 'empty';
+    }
+    
+    try {
+        // Get current states for all operations
+        const statePromises = operationIds.map(async (id) => {
+            try {
+                const state = await contract.getOperationState(id);
+                return `${id}:${state}`;
+            } catch (error) {
+                console.error(`Error getting state for operation ${id}:`, error);
+                return `${id}:error`;
+            }
+        });
+        
+        const states = await Promise.all(statePromises);
+        const statesString = states.sort().join('|');
+        
+        // Simple hash function
+        let hash = 0;
+        for (let i = 0; i < statesString.length; i++) {
+            const char = statesString.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash; // Convert to 32bit integer
+        }
+        return hash.toString();
+    } catch (error) {
+        console.error('Error generating operation states hash:', error);
+        return 'error';
+    }
 }
