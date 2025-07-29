@@ -67,6 +67,8 @@ const CONTRACT_ABI = [
 
 let provider;
 let contract;
+let autoRefreshInterval = null;
+let balanceRefreshInterval = null;
 
 // DOM elements
 const connectButton = document.getElementById('connectWallet');
@@ -206,6 +208,12 @@ function disconnectWallet() {
     provider = null;
     contract = null;
     
+    // Stop auto-refresh
+    stopAutoRefresh();
+    
+    // Stop balance refresh
+    stopBalanceRefresh();
+    
     connectionStatus.textContent = 'Wallet detected - Click to connect';
     connectButton.style.display = 'inline-block';
     connectButton.textContent = 'Connect Wallet';
@@ -253,6 +261,9 @@ async function loadContractData() {
         
         // Load contract balance
         await loadContractBalance();
+        
+        // Start auto-refresh for contract balance
+        startBalanceRefresh();
         
         // Load role assignments
         await loadRoleMembers();
@@ -531,6 +542,8 @@ async function loadScheduledOperations() {
 
         if (operations.length === 0) {
             noOperations.style.display = 'block';
+            // Stop auto-refresh if no operations
+            stopAutoRefresh();
         } else {
             operationsList.innerHTML = '';
             operations.forEach(operation => {
@@ -538,6 +551,14 @@ async function loadScheduledOperations() {
                 operationsList.appendChild(operationElement);
             });
             operationsList.style.display = 'block';
+            
+            // Check if we need auto-refresh for waiting/ready operations
+            const needsAutoRefresh = operations.some(op => op.status === 'Waiting' || op.status === 'Ready');
+            if (needsAutoRefresh) {
+                startAutoRefresh();
+            } else {
+                stopAutoRefresh();
+            }
         }
 
     } catch (error) {
@@ -590,10 +611,12 @@ function createOperationElement(operation) {
             </div>
         </div>
         <div class="operation-actions">
-            <button class="execute-button" onclick="executeOperation('${operation.id}', ${JSON.stringify(operation.calls).replace(/"/g, '&quot;')}, '${operation.predecessor}', '${operation.salt}')" 
-                    ${operation.status !== 'Ready' ? 'disabled' : ''}>
-                ${operation.status === 'Ready' ? 'Execute' : 'Not Ready'}
-            </button>
+            ${operation.status === 'Ready' ? 
+                `<button class="execute-button" onclick="executeOperation('${operation.id}', ${JSON.stringify(operation.calls).replace(/"/g, '&quot;')}, '${operation.predecessor}', '${operation.salt}')">
+                    Execute
+                </button>` : 
+                ''
+            }
         </div>
     `;
     
@@ -862,6 +885,11 @@ async function proposeTransaction() {
         document.getElementById('salt').value = '';
         document.getElementById('delay').value = '';
 
+        // Automatically refresh operations after successful proposal
+        setTimeout(() => {
+            loadScheduledOperations();
+        }, 1000);
+
         console.log('Proposal successful:', {
             txHash: receipt.transactionHash,
             operationHash: operationHash,
@@ -936,4 +964,48 @@ if (typeof window.ethereum === 'undefined') {
             clearInterval(checkForMetaMask);
         }
     }, 500);
+}
+
+// Auto-refresh functionality for operations
+function startAutoRefresh() {
+    // Don't start multiple intervals
+    if (autoRefreshInterval) {
+        return;
+    }
+    
+    console.log('Starting auto-refresh for operations...');
+    autoRefreshInterval = setInterval(() => {
+        console.log('Auto-refreshing operations...');
+        loadScheduledOperations();
+    }, 10000); // Refresh every 10 seconds
+}
+
+function stopAutoRefresh() {
+    if (autoRefreshInterval) {
+        console.log('Stopping auto-refresh for operations...');
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+    }
+}
+
+// Balance auto-refresh functionality
+function startBalanceRefresh() {
+    // Don't start multiple intervals
+    if (balanceRefreshInterval) {
+        return;
+    }
+    
+    console.log('Starting auto-refresh for contract balance...');
+    balanceRefreshInterval = setInterval(() => {
+        console.log('Auto-refreshing contract balance...');
+        loadContractBalance();
+    }, 5000); // Refresh every 5 seconds
+}
+
+function stopBalanceRefresh() {
+    if (balanceRefreshInterval) {
+        console.log('Stopping auto-refresh for contract balance...');
+        clearInterval(balanceRefreshInterval);
+        balanceRefreshInterval = null;
+    }
 }
