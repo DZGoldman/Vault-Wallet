@@ -865,6 +865,11 @@ async function proposeTokenTransfer() {
             loadScheduledOperations();
         }, 1000);
 
+        // Auto-switch to operations tab after successful transaction
+        setTimeout(() => {
+            switchMainTab('operations');
+        }, 1500);
+
         console.log('Token transfer proposal successful:', {
             txHash: receipt.transactionHash,
             operationHash: operationHash,
@@ -2550,6 +2555,11 @@ async function proposeTransaction() {
         setTimeout(() => {
             loadScheduledOperations();
         }, 1000);
+
+        // Auto-switch to operations tab after successful transaction
+        setTimeout(() => {
+            switchMainTab('operations');
+        }, 1500);
 
         console.log('Proposal successful:', {
             txHash: receipt.transactionHash,
