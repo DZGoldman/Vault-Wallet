@@ -255,6 +255,13 @@
             
             <div class="recovery-roles-management">
                 <h3>Emergency Role Management</h3>
+                <div style="background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+                    <div style="font-weight: 600; color: #38bdf8; margin-bottom: 8px;">🔧 Recovery Execute System</div>
+                    <div style="color: #e2e8f0; font-size: 0.9em; line-height: 1.4;">
+                        Role management during recovery uses <code>recoveryExecute</code> to call the vault's own <code>grantRole</code> and <code>revokeRole</code> functions. 
+                        This allows recoverers to manage permissions without special admin privileges.
+                    </div>
+                </div>
                 <p>Grant or revoke roles during recovery to restore normal operations:</p>
                 <div id="recoveryRolesList" class="recovery-roles-list">
                     <!-- Recovery role management will be populated by JavaScript -->

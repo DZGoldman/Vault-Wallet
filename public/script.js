@@ -50,6 +50,7 @@ const CONTRACT_ABI = [
     "function triggerRecoveryMode()",
     "function exitRecoveryMode()",
     "function cancelAllOperations()",
+    "function recoveryExecute(address target, uint256 value, bytes calldata data) payable",
     
     // Role management functions
     "function grantRole(bytes32 role, address account)",
@@ -1048,7 +1049,7 @@ async function loadRecoveryRoleManagement() {
                 <div class="recovery-role-title">
                     ${roleInfo.name}
                     <button class="grant-role-button" onclick="showGrantRoleForm('${roleInfo.roleFunction}', '${roleInfo.name}')" 
-                            ${!isRecoverer ? 'disabled title="Only recoverers can grant roles"' : ''}>
+                            ${!isRecoverer ? 'disabled title="Only recoverers can grant roles during recovery mode"' : 'title="Uses recoveryExecute to grant roles"'}>
                         + Grant Role
                     </button>
                 </div>
@@ -1059,7 +1060,7 @@ async function loadRecoveryRoleManagement() {
                             <div class="recovery-role-member">
                                 <span class="recovery-member-address">${member}</span>
                                 <button class="revoke-role-button" onclick="revokeRoleFromMember('${roleInfo.roleFunction}', '${member}')"
-                                        ${!isRecoverer ? 'disabled title="Only recoverers can revoke roles"' : ''}>
+                                        ${!isRecoverer ? 'disabled title="Only recoverers can revoke roles during recovery mode"' : 'title="Uses recoveryExecute to revoke roles"'}>
                                     Revoke
                                 </button>
                             </div>
@@ -2467,7 +2468,7 @@ async function grantRoleToAddress(roleFunction, roleName) {
 
     const hasPermission = await checkRecovererPermission();
     if (!hasPermission) {
-        showError('You do not have permission to grant roles.');
+        showError('You do not have permission to grant roles. Only recoverers can manage roles during recovery mode.');
         return;
     }
 
@@ -2489,13 +2490,20 @@ async function grantRoleToAddress(roleFunction, roleName) {
         const contractWithSigner = contract.connect(signer);
         const roleHash = await contract[roleFunction]();
         
-        const tx = await contractWithSigner.grantRole(roleHash, address);
-        console.log('Grant role transaction sent:', tx.hash);
+        // Use recoveryExecute to call grantRole on the vault itself
+        const grantRoleCalldata = contract.interface.encodeFunctionData('grantRole', [roleHash, address]);
+        
+        const tx = await contractWithSigner.recoveryExecute(
+            CONTRACT_ADDRESS, // target = the vault itself
+            0, // value = 0
+            grantRoleCalldata // data = encoded grantRole call
+        );
+        console.log('Recovery execute grant role transaction sent:', tx.hash);
         
         const receipt = await tx.wait();
-        console.log('Role granted successfully:', receipt);
+        console.log('Role granted successfully via recoveryExecute:', receipt);
 
-        alert(`✅ ${roleName} role granted to ${formatAddress(address)}`);
+        alert(`✅ ${roleName} role granted to ${formatAddress(address)} via recovery execute`);
         
         // Refresh the recovery role management UI
         await loadRecoveryRoleManagement();
@@ -2510,6 +2518,10 @@ async function grantRoleToAddress(roleFunction, roleName) {
         
         if (error.message.includes('user rejected')) {
             errorMsg = 'Transaction rejected by user.';
+        } else if (error.message.includes('NotInRecoveryMode')) {
+            errorMsg = 'Role management is only available during recovery mode.';
+        } else if (error.message.includes('CallerIsNotRecoverer')) {
+            errorMsg = 'Access denied: You do not have recoverer permissions.';
         } else if (error.message.includes('AccessControl')) {
             errorMsg = 'Access denied: You do not have recoverer permissions.';
         }
@@ -2526,7 +2538,7 @@ async function revokeRoleFromMember(roleFunction, memberAddress) {
 
     const hasPermission = await checkRecovererPermission();
     if (!hasPermission) {
-        showError('You do not have permission to revoke roles.');
+        showError('You do not have permission to revoke roles. Only recoverers can manage roles during recovery mode.');
         return;
     }
 
@@ -2538,13 +2550,20 @@ async function revokeRoleFromMember(roleFunction, memberAddress) {
         const contractWithSigner = contract.connect(signer);
         const roleHash = await contract[roleFunction]();
         
-        const tx = await contractWithSigner.revokeRole(roleHash, memberAddress);
-        console.log('Revoke role transaction sent:', tx.hash);
+        // Use recoveryExecute to call revokeRole on the vault itself
+        const revokeRoleCalldata = contract.interface.encodeFunctionData('revokeRole', [roleHash, memberAddress]);
+        
+        const tx = await contractWithSigner.recoveryExecute(
+            CONTRACT_ADDRESS, // target = the vault itself
+            0, // value = 0
+            revokeRoleCalldata // data = encoded revokeRole call
+        );
+        console.log('Recovery execute revoke role transaction sent:', tx.hash);
         
         const receipt = await tx.wait();
-        console.log('Role revoked successfully:', receipt);
+        console.log('Role revoked successfully via recoveryExecute:', receipt);
 
-        alert(`✅ Role revoked from ${formatAddress(memberAddress)}`);
+        alert(`✅ Role revoked from ${formatAddress(memberAddress)} via recovery execute`);
         
         // Refresh the recovery role management UI
         await loadRecoveryRoleManagement();
@@ -2558,6 +2577,10 @@ async function revokeRoleFromMember(roleFunction, memberAddress) {
         
         if (error.message.includes('user rejected')) {
             errorMsg = 'Transaction rejected by user.';
+        } else if (error.message.includes('NotInRecoveryMode')) {
+            errorMsg = 'Role management is only available during recovery mode.';
+        } else if (error.message.includes('CallerIsNotRecoverer')) {
+            errorMsg = 'Access denied: You do not have recoverer permissions.';
         } else if (error.message.includes('AccessControl')) {
             errorMsg = 'Access denied: You do not have recoverer permissions.';
         }
