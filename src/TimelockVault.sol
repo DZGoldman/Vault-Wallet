@@ -50,6 +50,7 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
     event RecoveryModeExited(address indexed recoverer, uint256 currentEpoch);
     event OperationCancelled(bytes32 indexed id, address indexed canceller);
     event AllOperationsCancelled(uint256 newEpoch, address indexed canceller);
+    event RecoveryExecution(address indexed recoverer, address indexed target, uint256 value, bytes data);
     
     /**
      * @dev Constructor initializes the timelock with specified roles
@@ -82,24 +83,11 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
     }
     
     /**
-     * @dev Internal function to set role admins for all timelock roles
-     * @param roleAdmin The role to set as admin for all timelock roles
-     */
-    function _setTimelockRoleAdmins(bytes32 roleAdmin) internal {
-        _setRoleAdmin(PROPOSER_ROLE, roleAdmin);
-        _setRoleAdmin(RECOVERY_TRIGGER_ROLE, roleAdmin);
-        _setRoleAdmin(EXECUTOR_ROLE, roleAdmin);
-        _setRoleAdmin(CANCELLER_ROLE, roleAdmin);
-    }
-    
-    /**
      * @dev Triggers recovery mode. Only callable by RECOVERY_TRIGGER_ROLE.
      * In recovery mode, no operations can be scheduled or executed.
      */
     function triggerRecoveryMode() external onlyRole(RECOVERY_TRIGGER_ROLE) whenNotInRecoveryMode {
         recoveryMode = true;
-        // Set RECOVERER_ROLE as the role admin for all timelock roles
-        _setTimelockRoleAdmins(RECOVERER_ROLE);
         
         emit RecoveryModeTriggered(msg.sender, currentRecoveryEpoch);
     }
@@ -107,12 +95,9 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
     /**
      * @dev Exits recovery mode and restores normal role admin structure.
      * Only callable by RECOVERER_ROLE when in recovery mode.
-     * Reverts role admins back to DEFAULT_ADMIN_ROLE (the vault itself).
      */
     function exitRecoveryMode() external onlyRecovererInRecoveryMode {
         recoveryMode = false;
-        // Set vault as the role admin for all timelock roles
-        _setTimelockRoleAdmins(DEFAULT_ADMIN_ROLE);
 
         emit RecoveryModeExited(msg.sender, currentRecoveryEpoch);
     }
@@ -125,8 +110,42 @@ contract TimelockVault is TimelockController, ReentrancyGuard {
     function cancelAllOperations() external onlyRecovererInRecoveryMode {
         // Increment epoch - this invalidates ALL pending operations from previous epochs
         currentRecoveryEpoch++;
-        
+
         emit AllOperationsCancelled(currentRecoveryEpoch, msg.sender);
+    }
+    
+    /**
+     * @dev Execute an operation during recovery mode. Only callable by RECOVERER_ROLE when in recovery mode.
+     * Allows recoverers to execute critical operations even when normal execution is blocked.
+     * Can execute any operation including timelock operations such as role management (grantRole/revokeRole)
+     * by targeting the vault itself (address(this)). This enables recoverers to manage roles and perform
+     * governance actions during recovery without needing special role admin privileges.
+     */
+    function recoveryExecute(
+        address target,
+        uint256 value,
+        bytes calldata data
+    ) public payable onlyRecovererInRecoveryMode {
+        _execute(target, value, data);
+        emit RecoveryExecution(msg.sender, target, value, data);
+    }
+    
+    /**
+     * @dev Execute a batch of operations during recovery mode. Only callable by RECOVERER_ROLE when in recovery mode.
+     * Allows recoverers to execute critical batch operations even when normal execution is blocked.
+     */
+    function recoveryExecuteBatch(
+        address[] calldata targets,
+        uint256[] calldata values,
+        bytes[] calldata payloads
+    ) public payable onlyRecovererInRecoveryMode {
+        require(targets.length == values.length, "TimelockController: length mismatch");
+        require(targets.length == payloads.length, "TimelockController: length mismatch");
+
+        for (uint256 i = 0; i < targets.length; ++i) {
+            _execute(targets[i], values[i], payloads[i]);
+            emit RecoveryExecution(msg.sender, targets[i], values[i], payloads[i]);
+        }
     }
     
     /**

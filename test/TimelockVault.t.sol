@@ -108,12 +108,6 @@ contract TimelockVaultTest is Test {
         vault.triggerRecoveryMode();
         
         assertTrue(vault.recoveryMode());
-        
-        // Check that role admins have changed
-        assertEq(vault.getRoleAdmin(vault.PROPOSER_ROLE()), vault.RECOVERER_ROLE());
-        assertEq(vault.getRoleAdmin(vault.EXECUTOR_ROLE()), vault.RECOVERER_ROLE());
-        assertEq(vault.getRoleAdmin(vault.CANCELLER_ROLE()), vault.RECOVERER_ROLE());
-        assertEq(vault.getRoleAdmin(vault.RECOVERY_TRIGGER_ROLE()), vault.RECOVERER_ROLE());
     }
     
     function testTriggerRecoveryModeUnauthorized() public {
@@ -143,12 +137,6 @@ contract TimelockVaultTest is Test {
         vault.exitRecoveryMode();
         
         assertFalse(vault.recoveryMode());
-        
-        // Check that role admins have been restored
-        assertEq(vault.getRoleAdmin(vault.PROPOSER_ROLE()), vault.DEFAULT_ADMIN_ROLE());
-        assertEq(vault.getRoleAdmin(vault.EXECUTOR_ROLE()), vault.DEFAULT_ADMIN_ROLE());
-        assertEq(vault.getRoleAdmin(vault.CANCELLER_ROLE()), vault.DEFAULT_ADMIN_ROLE());
-        assertEq(vault.getRoleAdmin(vault.RECOVERY_TRIGGER_ROLE()), vault.DEFAULT_ADMIN_ROLE());
     }
     
     function testExitRecoveryModeUnauthorized() public {
@@ -468,21 +456,147 @@ contract TimelockVaultTest is Test {
         assertEq(uint(vault.getOperationState(id)), uint(TimelockController.OperationState.Unset));
     }
     
-    function testRoleAdminSwitchingDuringRecovery() public {
-        // Test that role admins properly switch during recovery mode
+    // =============================================================================
+    // Recovery Execute Role Management Tests
+    // =============================================================================
+    
+    function testRecoveryExecuteGrantRole() public {
+        address newProposer = address(0x999);
         
-        // Initial state - vault is admin
-        assertEq(vault.getRoleAdmin(vault.PROPOSER_ROLE()), vault.DEFAULT_ADMIN_ROLE());
+        // Verify new proposer doesn't have role initially
+        assertFalse(vault.hasRole(vault.PROPOSER_ROLE(), newProposer));
         
-        // Enter recovery mode - recoverer becomes admin
+        // Enter recovery mode
         vm.prank(recoveryTriggerer);
         vault.triggerRecoveryMode();
-        assertEq(vault.getRoleAdmin(vault.PROPOSER_ROLE()), vault.RECOVERER_ROLE());
         
-        // Exit recovery mode - vault becomes admin again
+        // Recoverer grants PROPOSER_ROLE to new address using recoveryExecute
+        bytes memory grantRoleData = abi.encodeWithSelector(
+            vault.grantRole.selector,
+            vault.PROPOSER_ROLE(),
+            newProposer
+        );
+        
         vm.prank(recoverer);
-        vault.exitRecoveryMode();
-        assertEq(vault.getRoleAdmin(vault.PROPOSER_ROLE()), vault.DEFAULT_ADMIN_ROLE());
+        vault.recoveryExecute(address(vault), 0, grantRoleData);
+        
+        // Verify the role was granted
+        assertTrue(vault.hasRole(vault.PROPOSER_ROLE(), newProposer));
+    }
+    
+    function testRecoveryExecuteRevokeRole() public {
+        // Verify proposer has role initially
+        assertTrue(vault.hasRole(vault.PROPOSER_ROLE(), proposer));
+        
+        // Enter recovery mode
+        vm.prank(recoveryTriggerer);
+        vault.triggerRecoveryMode();
+        
+        // Recoverer revokes PROPOSER_ROLE from proposer using recoveryExecute
+        bytes memory revokeRoleData = abi.encodeWithSelector(
+            vault.revokeRole.selector,
+            vault.PROPOSER_ROLE(),
+            proposer
+        );
+        
+        vm.prank(recoverer);
+        vault.recoveryExecute(address(vault), 0, revokeRoleData);
+        
+        // Verify the role was revoked
+        assertFalse(vault.hasRole(vault.PROPOSER_ROLE(), proposer));
+    }
+    
+    function testRecoveryExecuteMultipleRoleOperations() public {
+        address newProposer = address(0x888);
+        address newExecutor = address(0x777);
+        
+        // Enter recovery mode
+        vm.prank(recoveryTriggerer);
+        vault.triggerRecoveryMode();
+        
+        // Grant PROPOSER_ROLE to new address
+        bytes memory grantProposerData = abi.encodeWithSelector(
+            vault.grantRole.selector,
+            vault.PROPOSER_ROLE(),
+            newProposer
+        );
+        
+        vm.prank(recoverer);
+        vault.recoveryExecute(address(vault), 0, grantProposerData);
+        
+        // Grant EXECUTOR_ROLE to new address
+        bytes memory grantExecutorData = abi.encodeWithSelector(
+            vault.grantRole.selector,
+            vault.EXECUTOR_ROLE(),
+            newExecutor
+        );
+        
+        vm.prank(recoverer);
+        vault.recoveryExecute(address(vault), 0, grantExecutorData);
+        
+        // Revoke PROPOSER_ROLE from original proposer
+        bytes memory revokeProposerData = abi.encodeWithSelector(
+            vault.revokeRole.selector,
+            vault.PROPOSER_ROLE(),
+            proposer
+        );
+        
+        vm.prank(recoverer);
+        vault.recoveryExecute(address(vault), 0, revokeProposerData);
+        
+        // Verify all operations succeeded
+        assertTrue(vault.hasRole(vault.PROPOSER_ROLE(), newProposer));
+        assertTrue(vault.hasRole(vault.EXECUTOR_ROLE(), newExecutor));
+        assertFalse(vault.hasRole(vault.PROPOSER_ROLE(), proposer));
+    }
+    
+    function testRecoveryExecuteRoleManagementOnlyInRecoveryMode() public {
+        address newProposer = address(0x666);
+        
+        bytes memory grantRoleData = abi.encodeWithSelector(
+            vault.grantRole.selector,
+            vault.PROPOSER_ROLE(),
+            newProposer
+        );
+        
+        // Should revert when not in recovery mode
+        vm.prank(recoverer);
+        vm.expectRevert(TimelockVault.NotInRecoveryMode.selector);
+        vault.recoveryExecute(address(vault), 0, grantRoleData);
+        
+        // Enter recovery mode
+        vm.prank(recoveryTriggerer);
+        vault.triggerRecoveryMode();
+        
+        // Should succeed in recovery mode
+        vm.prank(recoverer);
+        vault.recoveryExecute(address(vault), 0, grantRoleData);
+        
+        assertTrue(vault.hasRole(vault.PROPOSER_ROLE(), newProposer));
+    }
+    
+    function testRecoveryExecuteRoleManagementUnauthorized() public {
+        address newProposer = address(0x555);
+        
+        // Enter recovery mode
+        vm.prank(recoveryTriggerer);
+        vault.triggerRecoveryMode();
+        
+        bytes memory grantRoleData = abi.encodeWithSelector(
+            vault.grantRole.selector,
+            vault.PROPOSER_ROLE(),
+            newProposer
+        );
+        
+        // Should revert when called by non-recoverer
+        vm.prank(unauthorized);
+        vm.expectRevert(abi.encodeWithSelector(TimelockVault.CallerIsNotRecoverer.selector, unauthorized));
+        vault.recoveryExecute(address(vault), 0, grantRoleData);
+        
+        // Should also revert when called by other roles
+        vm.prank(proposer);
+        vm.expectRevert(abi.encodeWithSelector(TimelockVault.CallerIsNotRecoverer.selector, proposer));
+        vault.recoveryExecute(address(vault), 0, grantRoleData);
     }
     
     function testCannotExecuteGloballyCancelledOperation() public {
