@@ -25,65 +25,32 @@ function waitForEthers() {
     });
 }
 
-// Contract configuration - you'll need to update these after deployment
-const CONTRACT_ADDRESS = '0x5FbDB2315678afecb367f032d93F642f64180aa3'; // Update with your deployed contract address
-const CONTRACT_ABI = [
-    // TimelockController functions we need
-    "function getMinDelay() view returns (uint256)",
-    "function hasRole(bytes32 role, address account) view returns (bool)",
-    "function getRoleAdmin(bytes32 role) view returns (bytes32)",
-    "function schedule(address target, uint256 value, bytes calldata data, bytes32 predecessor, bytes32 salt, uint256 delay)",
-    "function cancel(bytes32 id)",
-    "function execute(address target, uint256 value, bytes calldata data, bytes32 predecessor, bytes32 salt)",
-    "function executeBatch(address[] calldata targets, uint256[] calldata values, bytes[] calldata payloads, bytes32 predecessor, bytes32 salt)",
-    "function hashOperation(address target, uint256 value, bytes calldata data, bytes32 predecessor, bytes32 salt) pure returns (bytes32)",
-    "function getOperationState(bytes32 id) view returns (uint8)",
-    "function getTimestamp(bytes32 id) view returns (uint256)",
-    "function isOperation(bytes32 id) view returns (bool)",
-    "function isOperationPending(bytes32 id) view returns (bool)",
-    "function isOperationReady(bytes32 id) view returns (bool)",
-    "function isOperationDone(bytes32 id) view returns (bool)",
-    
-    // TimelockVault specific functions
-    "function recoveryMode() view returns (bool)",
-    "function currentRecoveryEpoch() view returns (uint256)",
-    "function triggerRecoveryMode()",
-    "function exitRecoveryMode()",
-    "function cancelAllOperations()",
-    "function recoveryExecute(address target, uint256 value, bytes calldata data) payable",
-    
-    // Role management functions
-    "function grantRole(bytes32 role, address account)",
-    "function revokeRole(bytes32 role, address account)",
-    
-    // Role constants
-    "function PROPOSER_ROLE() view returns (bytes32)",
-    "function EXECUTOR_ROLE() view returns (bytes32)",
-    "function CANCELLER_ROLE() view returns (bytes32)",
-    "function RECOVERY_TRIGGER_ROLE() view returns (bytes32)",
-    "function RECOVERER_ROLE() view returns (bytes32)",
-    
-    // Events for role enumeration
-    "event RoleGranted(bytes32 indexed role, address indexed account, address indexed sender)",
-    "event RoleRevoked(bytes32 indexed role, address indexed account, address indexed sender)",
-    
-    // TimelockController events
-    "event CallScheduled(bytes32 indexed id, uint256 indexed index, address target, uint256 value, bytes data, bytes32 predecessor, uint256 delay)",
-    "event CallExecuted(bytes32 indexed id, uint256 indexed index, address target, uint256 value, bytes data)",
-    "event CallSalt(bytes32 indexed id, bytes32 salt)",
-    "event Cancelled(bytes32 indexed id)",
-    
-    // TimelockVault recovery events
-    "event RecoveryExecution(address indexed recoverer, address indexed target, uint256 value, bytes data)"
-];
-
-// ERC20 ABI for token balance queries
-const ERC20_ABI = [
-    "function balanceOf(address owner) view returns (uint256)",
-    "function decimals() view returns (uint8)",
-    "function symbol() view returns (string)",
-    "function name() view returns (string)"
-];
+// Wait for ethers to load
+function waitForEthers() {
+    return new Promise((resolve, reject) => {
+        if (typeof ethers !== 'undefined') {
+            console.log('Ethers loaded successfully');
+            resolve();
+            return;
+        }
+        
+        let attempts = 0;
+        const checkEthers = setInterval(() => {
+            attempts++;
+            console.log(`Waiting for ethers.js to load, attempt ${attempts}`);
+            
+            if (typeof ethers !== 'undefined') {
+                console.log('Ethers loaded successfully after waiting');
+                clearInterval(checkEthers);
+                resolve();
+            } else if (attempts >= window.CONFIG.UI_CONFIG.MAX_ETHERS_LOAD_ATTEMPTS) {
+                console.error(`Failed to load ethers.js after ${window.CONFIG.UI_CONFIG.MAX_ETHERS_LOAD_ATTEMPTS} attempts`);
+                clearInterval(checkEthers);
+                reject(new Error('Failed to load ethers.js'));
+            }
+        }, window.CONFIG.UI_CONFIG.ETHERS_LOAD_CHECK_INTERVAL);
+    });
+}
 
 let provider;
 let contract;
@@ -138,16 +105,6 @@ const tokenAmountHelp = document.getElementById('tokenAmountHelp');
 // Recovery trigger button
 const recoveryTriggerButton = document.getElementById('triggerRecovery');
 
-// Token list with deployed test tokens
-const SUPPORTED_TOKENS = [
-    // { name: "Dancoin", symbol: "DAN", address: "0xbdEd0D2bf404bdcBa897a74E6657f1f12e5C6fb6", decimals: 18 },
-    { name: "GoldToken", symbol: "GOLD", address: "0xA7918D253764E42d60C3ce2010a34d5a1e7C1398", decimals: 18 },
-    { name: "AnnoyingDecimals", symbol: "FU", address: "0x71a9d115E322467147391c4a71D85F8e1cA623EF", decimals: 6 }
-];
-
-// Make SUPPORTED_TOKENS available globally for views.js
-window.SUPPORTED_TOKENS = SUPPORTED_TOKENS;
-
 // Check if wallet is available on page load
 async function checkWallet() {
     console.log('Checking wallet...', typeof window.ethereum);
@@ -186,7 +143,7 @@ async function checkWallet() {
 
 // Function to open MetaMask install page
 function openMetaMaskInstall() {
-    window.open('https://metamask.io/download/', '_blank');
+    window.open(window.CONFIG.UI_CONFIG.METAMASK_INSTALL_URL, '_blank');
 }
 
 // Connect wallet function
@@ -217,7 +174,7 @@ async function connectWallet() {
         
         
         
-        contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+        contract = new ethers.Contract(window.CONFIG.CONTRACT_ADDRESS, window.CONFIG.CONTRACT_ABI, provider);
         
         connectionStatus.classList.remove('loading');
         await updateConnectionStatus();
@@ -459,7 +416,7 @@ window.switchMainTab = switchMainTab;
 // Initialize token list
 function initializeTokenList() {
     tokenSelect.innerHTML = '<option value="">Select a token...</option>';
-    SUPPORTED_TOKENS.forEach(token => {
+    window.CONFIG.SUPPORTED_TOKENS.forEach(token => {
         const option = document.createElement('option');
         option.value = token.address;
         option.textContent = `${token.name} (${token.address.slice(0, 6)}...${token.address.slice(-4)})`;
@@ -600,7 +557,7 @@ function hideAddTokenStatus() {
 
 async function validateTokenContract(address) {
     try {
-        const tokenContract = new ethers.Contract(address, ERC20_ABI, provider);
+        const tokenContract = new ethers.Contract(address, window.CONFIG.ERC20_ABI, provider);
         
         // Try to get basic token info
         const [name, symbol, decimals] = await Promise.all([
@@ -663,7 +620,7 @@ async function addNewToken() {
     }
     
     // Check if token already exists
-    const existingToken = SUPPORTED_TOKENS.find(token => 
+    const existingToken = window.CONFIG.SUPPORTED_TOKENS.find(token => 
         token.address.toLowerCase() === address.toLowerCase()
     );
     
@@ -682,7 +639,7 @@ async function addNewToken() {
         const tokenInfo = await validateTokenContract(address);
         
         // Add to SUPPORTED_TOKENS array
-        SUPPORTED_TOKENS.push({
+        window.CONFIG.SUPPORTED_TOKENS.push({
             name: tokenInfo.name,
             symbol: tokenInfo.symbol,
             address: tokenInfo.address,
@@ -722,14 +679,14 @@ function removeToken(tokenIndex) {
         return;
     }
     
-    const token = SUPPORTED_TOKENS[tokenIndex];
+    const token = window.CONFIG.SUPPORTED_TOKENS[tokenIndex];
     if (!token) return;
     
     const confirmed = confirm(`Remove ${token.symbol} (${token.name}) from the token list?`);
     if (!confirmed) return;
     
     // Remove from array
-    SUPPORTED_TOKENS.splice(tokenIndex, 1);
+    window.CONFIG.SUPPORTED_TOKENS.splice(tokenIndex, 1);
     
     showAddTokenStatus(`Removed ${token.symbol} from the list`, 'success');
     
@@ -1084,13 +1041,7 @@ async function loadRoleManagement() {
     const isRecoverer = await checkRecovererPermission();
     const isInRecoveryMode = window.isInRecoveryMode;
     
-    const roles = [
-        { name: 'Proposers', roleFunction: 'PROPOSER_ROLE' },
-        { name: 'Executors', roleFunction: 'EXECUTOR_ROLE' },
-        { name: 'Cancellers', roleFunction: 'CANCELLER_ROLE' },
-        { name: 'Recovery Triggerers', roleFunction: 'RECOVERY_TRIGGER_ROLE' },
-        { name: 'Recoverers', roleFunction: 'RECOVERER_ROLE' }
-    ];
+    const roles = window.CONFIG.RECOVERY_ROLES_CONFIG;
     
     recoveryRolesContainer.innerHTML = '';
     
@@ -1158,7 +1109,7 @@ async function loadContractData() {
     
     try {
         // Load contract basic info
-        document.getElementById('contractAddress').textContent = CONTRACT_ADDRESS;
+        document.getElementById('contractAddress').textContent = window.CONFIG.CONTRACT_ADDRESS;
 
         const minDelay = await contract.getMinDelay();
         
@@ -1196,7 +1147,7 @@ async function loadContractData() {
 async function loadContractBalance() {
     try {
         // Load ETH balance
-        const balance = await provider.getBalance(CONTRACT_ADDRESS);
+        const balance = await provider.getBalance(window.CONFIG.CONTRACT_ADDRESS);
         const balanceEth = ethers.utils.formatEther(balance);
         document.getElementById('contractBalance').textContent = `${balanceEth} ETH`;
         
@@ -1212,15 +1163,15 @@ async function loadTokenBalances() {
     try {
         const tokenBalancesElement = document.getElementById('tokenBalances');
         
-        if (SUPPORTED_TOKENS.length === 0) {
+        if (window.CONFIG.SUPPORTED_TOKENS.length === 0) {
             tokenBalancesElement.textContent = 'No tokens configured';
             return;
         }
         
-        const balancePromises = SUPPORTED_TOKENS.map(async (token, index) => {
+        const balancePromises = window.CONFIG.SUPPORTED_TOKENS.map(async (token, index) => {
             try {
-                const tokenContract = new ethers.Contract(token.address, ERC20_ABI, provider);
-                const balance = await tokenContract.balanceOf(CONTRACT_ADDRESS);
+                const tokenContract = new ethers.Contract(token.address, window.CONFIG.ERC20_ABI, provider);
+                const balance = await tokenContract.balanceOf(window.CONFIG.CONTRACT_ADDRESS);
                 const formattedBalance = ethers.utils.formatUnits(balance, token.decimals);
                 
                 // Format the balance to avoid showing too many decimal places
@@ -1279,13 +1230,7 @@ async function loadTokenBalances() {
 }
 
 async function loadRoleMembers() {
-    const roles = [
-        { name: 'proposers', roleFunction: 'PROPOSER_ROLE', listId: 'proposersList', loadingId: 'proposersLoading' },
-        { name: 'executors', roleFunction: 'EXECUTOR_ROLE', listId: 'executorsList', loadingId: 'executorsLoading' },
-        { name: 'cancellers', roleFunction: 'CANCELLER_ROLE', listId: 'cancellersList', loadingId: 'cancellersLoading' },
-        { name: 'recoveryTriggerers', roleFunction: 'RECOVERY_TRIGGER_ROLE', listId: 'recoveryTriggerersList', loadingId: 'recoveryTriggerersLoading' },
-        { name: 'recoverers', roleFunction: 'RECOVERER_ROLE', listId: 'recoverersList', loadingId: 'recoverersLoading' }
-    ];
+    const roles = window.CONFIG.ROLES_CONFIG;
 
     for (const roleInfo of roles) {
         try {
@@ -1384,7 +1329,7 @@ function showError(message) {
     errorSection.style.display = 'block';
     setTimeout(() => {
         errorSection.style.display = 'none';
-    }, 5000);
+    }, window.CONFIG.UI_CONFIG.ERROR_DISPLAY_DURATION);
 }
 
 function showProposalStatus(message, type) {
@@ -1395,7 +1340,7 @@ function showProposalStatus(message, type) {
     if (type === 'success' || type === 'error') {
         setTimeout(() => {
             proposalStatus.style.display = 'none';
-        }, 8000);
+        }, window.CONFIG.UI_CONFIG.SUCCESS_DISPLAY_DURATION);
     }
 }
 
@@ -2468,7 +2413,7 @@ async function grantRoleToAddress(roleFunction, roleName) {
         const grantRoleCalldata = contract.interface.encodeFunctionData('grantRole', [roleHash, address]);
         
         const tx = await contractWithSigner.recoveryExecute(
-            CONTRACT_ADDRESS, // target = the vault itself
+            window.CONFIG.CONTRACT_ADDRESS, // target = the vault itself
             0, // value = 0
             grantRoleCalldata // data = encoded grantRole call
         );
@@ -2528,7 +2473,7 @@ async function revokeRoleFromMember(roleFunction, memberAddress) {
         const revokeRoleCalldata = contract.interface.encodeFunctionData('revokeRole', [roleHash, memberAddress]);
         
         const tx = await contractWithSigner.recoveryExecute(
-            CONTRACT_ADDRESS, // target = the vault itself
+            window.CONFIG.CONTRACT_ADDRESS, // target = the vault itself
             0, // value = 0
             revokeRoleCalldata // data = encoded revokeRole call
         );
