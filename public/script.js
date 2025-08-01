@@ -71,7 +71,10 @@ const CONTRACT_ABI = [
     "event CallScheduled(bytes32 indexed id, uint256 indexed index, address target, uint256 value, bytes data, bytes32 predecessor, uint256 delay)",
     "event CallExecuted(bytes32 indexed id, uint256 indexed index, address target, uint256 value, bytes data)",
     "event CallSalt(bytes32 indexed id, bytes32 salt)",
-    "event Cancelled(bytes32 indexed id)"
+    "event Cancelled(bytes32 indexed id)",
+    
+    // TimelockVault recovery events
+    "event RecoveryExecution(address indexed recoverer, address indexed target, uint256 value, bytes data)"
 ];
 
 // ERC20 ABI for token balance queries
@@ -95,6 +98,7 @@ let allScheduledEvents = [];
 let allExecutedEvents = [];
 let allCancelledEvents = [];
 let allSaltEvents = [];
+let allRecoveryExecutionEvents = [];
 let lastEventsHash = null;
 let lastOperationStatesHash = null;
 
@@ -283,6 +287,7 @@ function disconnectWallet() {
     allExecutedEvents = [];
     allCancelledEvents = [];
     allSaltEvents = [];
+    allRecoveryExecutionEvents = [];
     lastEventsHash = null;
     lastOperationStatesHash = null;
     
@@ -365,6 +370,7 @@ newTokenAddressInput.addEventListener('keypress', (e) => {
 document.addEventListener('DOMContentLoaded', () => {
     const exitRecoveryButton = document.getElementById('exitRecoveryMode');
     const cancelAllButton = document.getElementById('cancelAllOperations');
+    const cancelAllInRecoveryButton = document.getElementById('cancelAllOperationsInRecovery');
     
     if (exitRecoveryButton) {
         exitRecoveryButton.addEventListener('click', exitRecoveryMode);
@@ -372,6 +378,10 @@ document.addEventListener('DOMContentLoaded', () => {
     
     if (cancelAllButton) {
         cancelAllButton.addEventListener('click', cancelAllOperations);
+    }
+    
+    if (cancelAllInRecoveryButton) {
+        cancelAllInRecoveryButton.addEventListener('click', cancelAllOperations);
     }
 });
 
@@ -395,15 +405,6 @@ function switchMainTab(tabType) {
     console.log('Switching to tab:', tabType);
     
     try {
-        // Don't switch to create transaction if it's disabled (recovery mode)
-        if (tabType === 'createTransaction') {
-            const createTransactionTab = document.getElementById('createTransactionTab');
-            if (createTransactionTab && createTransactionTab.classList.contains('disabled')) {
-                console.log('Create transaction tab is disabled, not switching');
-                return; // Don't switch
-            }
-        }
-        
         // Remove active class from all tabs and sections
         const toolbarTabs = document.querySelectorAll('.toolbar-tab');
         const mainSections = document.querySelectorAll('.main-section');
@@ -420,15 +421,18 @@ function switchMainTab(tabType) {
         if (tabType === 'dashboard') {
             targetTab = document.getElementById('dashboardTab');
             targetSection = document.getElementById('dashboardSection');
-        } else if (tabType === 'createTransaction') {
-            targetTab = document.getElementById('createTransactionTab');
-            targetSection = document.getElementById('createTransactionSection');
+        } else if (tabType === 'newTxn') {
+            targetTab = document.getElementById('newTxnTab');
+            targetSection = document.getElementById('newTxnSection');
         } else if (tabType === 'operations') {
             targetTab = document.getElementById('operationsTab');
             targetSection = document.getElementById('operationsSection');
-        } else if (tabType === 'recoveryPanel') {
-            targetTab = document.getElementById('recoveryPanelTab');
-            targetSection = document.getElementById('recoveryPanelSection');
+        } else if (tabType === 'roleManagement') {
+            targetTab = document.getElementById('roleManagementTab');
+            targetSection = document.getElementById('roleManagementSection');
+        } else if (tabType === 'recoveryToggle') {
+            targetTab = document.getElementById('recoveryToggleTab');
+            targetSection = document.getElementById('recoveryToggleSection');
         }
         
         console.log('Target elements found:', !!targetTab, !!targetSection);
@@ -830,29 +834,68 @@ async function proposeTokenTransfer() {
 
         showProposalStatus('Submitting token transfer to blockchain...', 'pending');
 
-        // Call the schedule function
-        const tx = await contractWithSigner.schedule(
-            tokenAddr,
-            valueWei,
-            transferCalldata,
-            predecessor,
-            salt,
-            delay
-        );
-
-        showProposalStatus('Token transfer submitted! Waiting for confirmation...', 'pending');
+        let tx;
+        
+        // Check if we're in recovery mode
+        if (window.isInRecoveryMode) {
+            // In recovery mode: use recoveryExecute for immediate execution
+            console.log('Recovery mode active - using recoveryExecute for token transfer with parameters:', {
+                target: tokenAddr,
+                value: valueWei.toString(),
+                data: transferCalldata
+            });
+            
+            tx = await contractWithSigner.recoveryExecute(
+                tokenAddr,
+                valueWei,
+                transferCalldata
+            );
+            
+            showProposalStatus('Recovery execute for token transfer submitted! Waiting for confirmation...', 'pending');
+        } else {
+            // Normal mode: use schedule for timelock delay
+            console.log('Normal mode - using schedule for token transfer with parameters:', {
+                target: tokenAddr,
+                value: valueWei.toString(),
+                data: transferCalldata,
+                predecessor: predecessor,
+                salt: salt,
+                delay: delay
+            });
+            
+            tx = await contractWithSigner.schedule(
+                tokenAddr,
+                valueWei,
+                transferCalldata,
+                predecessor,
+                salt,
+                delay
+            );
+            
+            showProposalStatus('Token transfer submitted! Waiting for confirmation...', 'pending');
+        }
 
         // Wait for transaction to be mined
         const receipt = await tx.wait();
 
-        showProposalStatus(
-            `Token transfer proposed successfully!
-            Transaction Hash: ${receipt.transactionHash}
-            Operation Hash: ${operationHash}
-            Transfer: ${amount} ${symbol} to ${toAddress}
-            Ready for execution after delay period.`, 
-            'success'
-        );
+        if (window.isInRecoveryMode) {
+            showProposalStatus(
+                `Token transfer executed immediately via recoveryExecute!
+                Transaction Hash: ${receipt.transactionHash}
+                Transfer: ${amount} ${symbol} to ${toAddress}
+                No delay required in recovery mode.`, 
+                'success'
+            );
+        } else {
+            showProposalStatus(
+                `Token transfer proposed successfully!
+                Transaction Hash: ${receipt.transactionHash}
+                Operation Hash: ${operationHash}
+                Transfer: ${amount} ${symbol} to ${toAddress}
+                Ready for execution after delay period.`, 
+                'success'
+            );
+        }
 
         // Clear form
         tokenAddress.value = '';
@@ -874,25 +917,46 @@ async function proposeTokenTransfer() {
             switchMainTab('operations');
         }, 1500);
 
-        console.log('Token transfer proposal successful:', {
-            txHash: receipt.transactionHash,
-            operationHash: operationHash,
-            token: tokenAddr,
-            to: toAddress,
-            amount: amount,
-            rawAmount: rawAmount.toString(),
-            salt: salt,
-            delay: delay
-        });
+        if (window.isInRecoveryMode) {
+            console.log('Token transfer recovery execute successful:', {
+                txHash: receipt.transactionHash,
+                token: tokenAddr,
+                to: toAddress,
+                amount: amount,
+                rawAmount: rawAmount.toString(),
+                mode: 'recovery (immediate execution)'
+            });
+        } else {
+            console.log('Token transfer proposal successful:', {
+                txHash: receipt.transactionHash,
+                operationHash: operationHash,
+                token: tokenAddr,
+                to: toAddress,
+                amount: amount,
+                rawAmount: rawAmount.toString(),
+                salt: salt,
+                delay: delay,
+                mode: 'normal (scheduled for later execution)'
+            });
+        }
 
     } catch (error) {
         console.error('Error proposing token transfer:', error);
         
-        let errorMsg = 'Failed to propose token transfer: ';
+        let errorMsg = window.isInRecoveryMode ? 
+            'Failed to execute token transfer via recovery execute: ' : 
+            'Failed to propose token transfer: ';
+            
         if (error.code === 4001) {
             errorMsg += 'Transaction rejected by user.';
-        } else if (error.message.includes('AccessControl')) {
-            errorMsg += 'You do not have the PROPOSER_ROLE required to propose transactions.';
+        } else if (error.message.includes('AccessControl') || error.message.includes('CallerIsNotRecoverer')) {
+            if (window.isInRecoveryMode) {
+                errorMsg += 'You do not have the RECOVERER_ROLE required for recovery execute.';
+            } else {
+                errorMsg += 'You do not have the PROPOSER_ROLE required to propose transactions.';
+            }
+        } else if (error.message.includes('NotInRecoveryMode')) {
+            errorMsg += 'Recovery execute requires recovery mode to be active.';
         } else if (error.message.includes('TimelockController: insufficient delay')) {
             errorMsg += 'The specified delay is less than the minimum required delay.';
         } else {
@@ -910,77 +974,65 @@ async function handleRecoveryModeUI(isRecoveryMode) {
     // Track recovery mode status globally
     window.isInRecoveryMode = isRecoveryMode;
     
-    const createTransactionTab = document.getElementById('createTransactionTab');
-    const recoveryPanelTab = document.getElementById('recoveryPanelTab');
-    const recoveryTriggerSection = document.querySelector('.recovery-trigger-section');
-    const roleAssignmentsSection = document.getElementById('roleAssignmentsSection');
-    const infoSectionsContainer = document.querySelector('.info-sections-container');
+    // Update mode indicators and explanations across all tabs
+    const newTxnModeHeader = document.getElementById('newTxnModeHeader');
+    const roleManagementModeHeader = document.getElementById('roleManagementModeHeader');
+    const normalModeExplanation = document.getElementById('normalModeExplanation');
+    const recoveryModeExplanation = document.getElementById('recoveryModeExplanation');
+    const cancelAllInRecovery = document.getElementById('cancelAllOperationsInRecovery');
+    const recoveryModeStatus = document.getElementById('recoveryModeStatus');
+    const recoveryEpochStatus = document.getElementById('recoveryEpochStatus');
+    const triggerRecoveryButton = document.getElementById('triggerRecovery');
+    const exitRecoveryButton = document.getElementById('exitRecoveryMode');
     
     if (isRecoveryMode) {
-        // Show Recovery Panel tab
-        recoveryPanelTab.style.display = 'flex';
+        // Show recovery mode indicators
+        if (newTxnModeHeader) newTxnModeHeader.style.display = 'block';
+        if (roleManagementModeHeader) roleManagementModeHeader.style.display = 'block';
         
-        // Disable create transaction tab
-        createTransactionTab.classList.add('disabled');
-        createTransactionTab.title = 'Transaction creation is disabled during recovery mode';
+        // Update explanations
+        if (normalModeExplanation) normalModeExplanation.style.display = 'none';
+        if (recoveryModeExplanation) recoveryModeExplanation.style.display = 'inline';
         
-        // Hide recovery trigger button
-        if (recoveryTriggerSection) {
-            recoveryTriggerSection.style.display = 'none';
-        }
+        // Show cancel all operations button in Operations tab
+        if (cancelAllInRecovery) cancelAllInRecovery.style.display = 'block';
         
-        // Hide role assignments section in dashboard
-        if (roleAssignmentsSection) {
-            roleAssignmentsSection.style.display = 'none';
-        }
-        
-        // Center the remaining two info sections in dashboard
-        if (infoSectionsContainer) {
-            infoSectionsContainer.classList.add('recovery-mode');
-        }
-        
-        // Switch to Recovery Panel as default, or if currently on create transaction tab
-        const createTransactionSection = document.getElementById('createTransactionSection');
-        const currentActiveSection = document.querySelector('.main-section.active');
-        
-        if (!currentActiveSection || 
-            createTransactionSection.classList.contains('active') ||
-            currentActiveSection.id === 'dashboardSection') {
-            switchMainTab('recoveryPanel');
-        }
+        // Update recovery toggle section
+        if (recoveryModeStatus) recoveryModeStatus.textContent = '🚨 Recovery Mode Active';
+        if (triggerRecoveryButton) triggerRecoveryButton.style.display = 'none';
+        if (exitRecoveryButton) exitRecoveryButton.style.display = 'block';
         
         // Load recovery mode role management
-        await loadRecoveryRoleManagement();
+        await loadRoleManagement();
         
         // Update recovery mode button states
         await updateRecoveryModeButtons();
     } else {
-        // Hide Recovery Panel tab
-        recoveryPanelTab.style.display = 'none';
+        // Hide recovery mode indicators
+        if (newTxnModeHeader) newTxnModeHeader.style.display = 'none';
+        if (roleManagementModeHeader) roleManagementModeHeader.style.display = 'none';
         
-        // Enable create transaction tab
-        createTransactionTab.classList.remove('disabled');
-        createTransactionTab.title = '';
+        // Update explanations
+        if (normalModeExplanation) normalModeExplanation.style.display = 'inline';
+        if (recoveryModeExplanation) recoveryModeExplanation.style.display = 'none';
         
-        // Show recovery trigger button
-        if (recoveryTriggerSection) {
-            recoveryTriggerSection.style.display = 'flex';
-        }
+        // Hide cancel all operations button in Operations tab
+        if (cancelAllInRecovery) cancelAllInRecovery.style.display = 'none';
         
-        // Show role assignments section in dashboard
-        if (roleAssignmentsSection) {
-            roleAssignmentsSection.style.display = 'block';
-        }
+        // Update recovery toggle section
+        if (recoveryModeStatus) recoveryModeStatus.textContent = 'Normal Mode';
+        if (triggerRecoveryButton) triggerRecoveryButton.style.display = 'block';
+        if (exitRecoveryButton) exitRecoveryButton.style.display = 'none';
         
-        // Restore three-column layout in dashboard
-        if (infoSectionsContainer) {
-            infoSectionsContainer.classList.remove('recovery-mode');
-        }
-        
-        // Switch to dashboard if currently on recovery panel
-        const recoveryPanelSection = document.getElementById('recoveryPanelSection');
-        if (recoveryPanelSection && recoveryPanelSection.classList.contains('active')) {
-            switchMainTab('dashboard');
+        // Clear role management UI (will show view-only in normal mode)
+        await loadRoleManagement();
+    }
+    
+    // Update recovery epoch status in both dashboard and recovery toggle
+    if (recoveryEpochStatus) {
+        const recoveryEpoch = document.getElementById('recoveryEpoch');
+        if (recoveryEpoch) {
+            recoveryEpochStatus.textContent = recoveryEpoch.textContent;
         }
     }
 }
@@ -1008,8 +1060,9 @@ async function updateRecoveryModeButtons() {
     const isRecoverer = await checkRecovererPermission();
     const exitRecoveryButton = document.getElementById('exitRecoveryMode');
     const cancelAllButton = document.getElementById('cancelAllOperations');
+    const cancelAllInRecoveryButton = document.getElementById('cancelAllOperationsInRecovery');
     
-    [exitRecoveryButton, cancelAllButton].forEach(button => {
+    [exitRecoveryButton, cancelAllButton, cancelAllInRecoveryButton].forEach(button => {
         if (button) {
             if (!isRecoverer) {
                 button.disabled = true;
@@ -1022,10 +1075,11 @@ async function updateRecoveryModeButtons() {
     });
 }
 
-// Load recovery role management UI
-async function loadRecoveryRoleManagement() {
+// Load role management UI (works for both normal and recovery mode)
+async function loadRoleManagement() {
     const recoveryRolesContainer = document.getElementById('recoveryRolesList');
     const isRecoverer = await checkRecovererPermission();
+    const isInRecoveryMode = window.isInRecoveryMode;
     
     const roles = [
         { name: 'Proposers', roleFunction: 'PROPOSER_ROLE' },
@@ -1045,13 +1099,20 @@ async function loadRecoveryRoleManagement() {
             const roleGroupDiv = document.createElement('div');
             roleGroupDiv.className = 'recovery-role-group';
             
+            // Only show grant/revoke buttons in recovery mode
+            const showButtons = isInRecoveryMode && isRecoverer;
+            const disabledReason = !isInRecoveryMode ? 'Role management requires recovery mode to be active' : 
+                                  !isRecoverer ? 'Only recoverers can manage roles during recovery mode' : '';
+            
             roleGroupDiv.innerHTML = `
                 <div class="recovery-role-title">
                     ${roleInfo.name}
-                    <button class="grant-role-button" onclick="showGrantRoleForm('${roleInfo.roleFunction}', '${roleInfo.name}')" 
-                            ${!isRecoverer ? 'disabled title="Only recoverers can grant roles during recovery mode"' : 'title="Uses recoveryExecute to grant roles"'}>
-                        + Grant Role
-                    </button>
+                    ${isInRecoveryMode ? `
+                        <button class="grant-role-button" onclick="showGrantRoleForm('${roleInfo.roleFunction}', '${roleInfo.name}')" 
+                                ${!isRecoverer ? `disabled title="${disabledReason}"` : 'title="Uses recoveryExecute to grant roles"'}>
+                            + Grant Role
+                        </button>
+                    ` : ''}
                 </div>
                 <div class="recovery-role-members" id="recovery-${roleInfo.roleFunction}-members">
                     ${members.length === 0 ? 
@@ -1059,29 +1120,33 @@ async function loadRecoveryRoleManagement() {
                         members.map(member => `
                             <div class="recovery-role-member">
                                 <span class="recovery-member-address">${member}</span>
-                                <button class="revoke-role-button" onclick="revokeRoleFromMember('${roleInfo.roleFunction}', '${member}')"
-                                        ${!isRecoverer ? 'disabled title="Only recoverers can revoke roles during recovery mode"' : 'title="Uses recoveryExecute to revoke roles"'}>
-                                    Revoke
-                                </button>
+                                ${isInRecoveryMode ? `
+                                    <button class="revoke-role-button" onclick="revokeRoleFromMember('${roleInfo.roleFunction}', '${member}')"
+                                            ${!isRecoverer ? `disabled title="${disabledReason}"` : 'title="Uses recoveryExecute to revoke roles"'}>
+                                        Revoke
+                                    </button>
+                                ` : ''}
                             </div>
                         `).join('')
                     }
                 </div>
-                <div class="grant-role-form" id="grant-${roleInfo.roleFunction}-form" style="display: none;">
-                    <input type="text" class="grant-role-input" id="grant-${roleInfo.roleFunction}-address" 
-                           placeholder="0x... address to grant ${roleInfo.name} role">
-                    <button class="grant-role-button" onclick="grantRoleToAddress('${roleInfo.roleFunction}', '${roleInfo.name}')">
-                        Grant
-                    </button>
-                    <button class="revoke-role-button" onclick="hideGrantRoleForm('${roleInfo.roleFunction}')">
-                        Cancel
-                    </button>
-                </div>
+                ${isInRecoveryMode ? `
+                    <div class="grant-role-form" id="grant-${roleInfo.roleFunction}-form" style="display: none;">
+                        <input type="text" class="grant-role-input" id="grant-${roleInfo.roleFunction}-address" 
+                               placeholder="0x... address to grant ${roleInfo.name} role">
+                        <button class="grant-role-button" onclick="grantRoleToAddress('${roleInfo.roleFunction}', '${roleInfo.name}')">
+                            Grant
+                        </button>
+                        <button class="revoke-role-button" onclick="hideGrantRoleForm('${roleInfo.roleFunction}')">
+                            Cancel
+                        </button>
+                    </div>
+                ` : ''}
             `;
             
             recoveryRolesContainer.appendChild(roleGroupDiv);
         } catch (error) {
-            console.error(`Failed to load recovery role ${roleInfo.name}:`, error);
+            console.error(`Failed to load role ${roleInfo.name}:`, error);
         }
     }
 }
@@ -1111,8 +1176,8 @@ async function loadContractData() {
         // Start auto-refresh for contract balance
         startBalanceRefresh();
         
-        // Load role assignments
-        await loadRoleMembers();
+        // Role assignments moved to Role Management tab
+        // await loadRoleMembers();
         
         // Ensure button states are updated before loading operations
         await updateButtonStates();
@@ -1370,7 +1435,22 @@ async function loadScheduledOperations() {
             const newSaltEvents = await contract.queryFilter(saltFilter, fromBlock, currentBlock);
             allSaltEvents.push(...newSaltEvents);
             
-            console.log(`Found new events: ${newScheduledEvents.length} scheduled, ${newExecutedEvents.length} executed, ${newCancelledEvents.length} cancelled, ${newSaltEvents.length} salt`);
+            // Get new RecoveryExecution events
+            console.log('Querying RecoveryExecution events...');
+            const recoveryExecutionFilter = contract.filters.RecoveryExecution();
+            console.log('RecoveryExecution filter:', recoveryExecutionFilter);
+            
+            try {
+                const newRecoveryExecutionEvents = await contract.queryFilter(recoveryExecutionFilter, fromBlock, currentBlock);
+                console.log('Raw RecoveryExecution events found:', newRecoveryExecutionEvents.length);
+                console.log('RecoveryExecution events:', newRecoveryExecutionEvents);
+                
+                allRecoveryExecutionEvents.push(...newRecoveryExecutionEvents);
+                console.warn(`Found new events: ${newScheduledEvents.length} scheduled, ${newExecutedEvents.length} executed, ${newCancelledEvents.length} cancelled, ${newSaltEvents.length} salt, ${newRecoveryExecutionEvents.length} recovery executions`);
+            } catch (error) {
+                console.error('Error querying RecoveryExecution events:', error);
+            } 
+            
         }
 
         // Update last queried block
@@ -1478,7 +1558,45 @@ async function loadScheduledOperations() {
                 statusClass
             });
         }
+        
+        // Add recovery execution operations to the list
+        console.log(`Processing ${allRecoveryExecutionEvents.length} recovery execution events`);
+        for (const recoveryEvent of allRecoveryExecutionEvents) {
+            // Create a unique ID for recovery operations using transaction hash + log index
+            const recoveryId = `recovery-${recoveryEvent.transactionHash}-${recoveryEvent.logIndex}`;
+            
+            console.log('Adding recovery operation:', {
+                id: recoveryId,
+                target: recoveryEvent.args.target,
+                recoverer: recoveryEvent.args.recoverer,
+                transactionHash: recoveryEvent.transactionHash
+            });
+            
+            operations.push({
+                id: recoveryId,
+                target: recoveryEvent.args.target,
+                value: recoveryEvent.args.value.toString(),
+                data: recoveryEvent.args.data,
+                executor: recoveryEvent.args.recoverer, // Use 'recoverer' from the actual event
+                recoveryEpoch: 'N/A', // This field doesn't exist in the actual event
+                calls: [{
+                    target: recoveryEvent.args.target,
+                    value: recoveryEvent.args.value.toString(),
+                    data: recoveryEvent.args.data
+                }],
+                delay: 0,
+                salt: 'N/A (Recovery)',
+                predecessor: 'N/A (Recovery)',
+                transactionHash: recoveryEvent.transactionHash,
+                blockNumber: recoveryEvent.blockNumber,
+                status: 'Recovery Executed',
+                statusClass: 'status-recovery-executed',
+                type: 'recovery'
+            });
+        }
 
+        console.log(`Total operations including recovery: ${operations.length}`);
+        
         // Sort by block number (newest first)
         operations.sort((a, b) => b.blockNumber - a.blockNumber);
 
@@ -1534,6 +1652,18 @@ async function loadScheduledOperations() {
             operationsCount.textContent = `${operations.length} operation${operations.length !== 1 ? 's' : ''}`;
             operationsCount.className = 'operations-count total';
         }
+        
+        // Update dashboard pending operations count
+        const dashboardPendingCount = document.getElementById('pendingOperationsCount');
+        if (dashboardPendingCount) {
+            if (pendingCount > 0) {
+                dashboardPendingCount.textContent = `${pendingCount} pending operation${pendingCount !== 1 ? 's' : ''}`;
+                dashboardPendingCount.style.color = '#fbbf24'; // Yellow for pending
+            } else {
+                dashboardPendingCount.textContent = 'No pending operations';
+                dashboardPendingCount.style.color = '#10b981'; // Green for no pending
+            }
+        }
 
         if (operations.length === 0) {
             noOperations.style.display = 'block';
@@ -1570,6 +1700,11 @@ async function loadScheduledOperations() {
 function createOperationElement(operation) {
     const div = document.createElement('div');
     div.className = 'operation-item';
+    
+    // Handle recovery operations differently
+    if (operation.type === 'recovery') {
+        return createRecoveryOperationElement(operation);
+    }
     
     // Calculate ready time
     const currentTime = Math.floor(Date.now() / 1000);
@@ -1627,6 +1762,224 @@ function createOperationElement(operation) {
     `;
     
     return div;
+}
+
+// Create recovery operation element
+function createRecoveryOperationElement(operation) {
+    const div = document.createElement('div');
+    div.className = 'operation-item recovery-operation';
+    
+    // Analyze the recovery operation type
+    const transactionInfo = analyzeRecoveryTransactionType(operation);
+    
+    // Create the recovery operation display
+    let operationDetails;
+    if (transactionInfo.type === 'role_management') {
+        operationDetails = createRoleManagementDisplay(transactionInfo, operation);
+    } else if (transactionInfo.type === 'eth_transfer') {
+        operationDetails = createRecoveryETHTransferDisplay(transactionInfo, operation);
+    } else if (transactionInfo.type === 'token_transfer') {
+        operationDetails = createRecoveryTokenTransferDisplay(transactionInfo, operation);
+    } else {
+        operationDetails = createRecoveryGenericDisplay(operation);
+    }
+    
+    div.innerHTML = `
+        <div class="operation-header">
+            <div class="operation-info">
+                <div class="operation-id">Recovery ID: ${operation.id}</div>
+                <div class="operation-type">🚨 ${transactionInfo.displayName}</div>
+            </div>
+            <div class="operation-status ${operation.statusClass}">${operation.status}</div>
+        </div>
+        ${operationDetails}
+    `;
+    
+    return div;
+}
+
+// Analyze recovery transaction type
+function analyzeRecoveryTransactionType(operation) {
+    const call = operation.calls[0];
+    
+    // Check for role management (grantRole/revokeRole)
+    if (call.data && call.data.length >= 10) {
+        const methodSignature = call.data.slice(0, 10);
+        const grantRoleSignature = '0x2f2ff15d'; // grantRole(bytes32,address)
+        const revokeRoleSignature = '0xd547741f'; // revokeRole(bytes32,address)
+        
+        if (methodSignature.toLowerCase() === grantRoleSignature.toLowerCase()) {
+            return {
+                type: 'role_management',
+                displayName: 'Role Grant',
+                action: 'grant'
+            };
+        } else if (methodSignature.toLowerCase() === revokeRoleSignature.toLowerCase()) {
+            return {
+                type: 'role_management',
+                displayName: 'Role Revoke',
+                action: 'revoke'
+            };
+        }
+    }
+    
+    // Check for ETH transfer (no data or empty data)
+    if (!call.data || call.data === '0x' || call.data === '0x00') {
+        const valueEth = ethers.utils.formatEther(call.value);
+        return {
+            type: 'eth_transfer',
+            displayName: 'Recovery ETH Transfer',
+            to: call.target,
+            amount: valueEth
+        };
+    }
+    
+    // Check for ERC20 token transfer
+    if (call.data.length >= 10) {
+        const methodSignature = call.data.slice(0, 10);
+        const transferSignature = '0xa9059cbb'; // transfer(address,uint256)
+        
+        if (methodSignature.toLowerCase() === transferSignature.toLowerCase()) {
+            return {
+                type: 'token_transfer',
+                displayName: 'Recovery Token Transfer'
+            };
+        }
+    }
+    
+    // Default: generic recovery operation
+    return {
+        type: 'generic',
+        displayName: 'Recovery Operation'
+    };
+}
+
+// Create role management display for recovery operations
+function createRoleManagementDisplay(transactionInfo, operation) {
+    return `
+        <div class="operation-details transaction-display role-management">
+            <div class="transaction-summary">
+                <div class="transaction-icon">${transactionInfo.action === 'grant' ? '➕' : '➖'}</div>
+                <div class="transaction-info">
+                    <div class="transaction-title">${transactionInfo.action === 'grant' ? 'Grant' : 'Revoke'} Role</div>
+                    <div class="transaction-subtitle">via recoveryExecute</div>
+                </div>
+            </div>
+            
+            <div class="transaction-details">
+                <div class="detail-row">
+                    <span class="detail-label">Target Contract</span>
+                    <span class="detail-value address-value">${operation.target}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Recoverer</span>
+                    <span class="detail-value address-value">${operation.executor}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Transaction Hash</span>
+                    <span class="detail-value address-value">${operation.transactionHash}</span>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// Create recovery ETH transfer display
+function createRecoveryETHTransferDisplay(transactionInfo, operation) {
+    return `
+        <div class="operation-details transaction-display recovery-eth-transfer">
+            <div class="transaction-summary">
+                <div class="transaction-icon">🚨💰</div>
+                <div class="transaction-info">
+                    <div class="transaction-title">Recovery ETH Transfer: ${transactionInfo.amount} ETH</div>
+                    <div class="transaction-subtitle">to ${formatAddress(transactionInfo.to)}</div>
+                </div>
+            </div>
+            
+            <div class="transaction-details">
+                <div class="detail-row">
+                    <span class="detail-label">Recipient</span>
+                    <span class="detail-value address-value">${transactionInfo.to}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Amount</span>
+                    <span class="detail-value">${transactionInfo.amount} ETH</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Recoverer</span>
+                    <span class="detail-value address-value">${operation.executor}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Transaction Hash</span>
+                    <span class="detail-value address-value">${operation.transactionHash}</span>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// Create recovery token transfer display
+function createRecoveryTokenTransferDisplay(transactionInfo, operation) {
+    return `
+        <div class="operation-details transaction-display recovery-token-transfer">
+            <div class="transaction-summary">
+                <div class="transaction-icon">🚨🪙</div>
+                <div class="transaction-info">
+                    <div class="transaction-title">Recovery Token Transfer</div>
+                    <div class="transaction-subtitle">to ${formatAddress(operation.calls[0].target)}</div>
+                </div>
+            </div>
+            
+            <div class="transaction-details">
+                <div class="detail-row">
+                    <span class="detail-label">Token Contract</span>
+                    <span class="detail-value address-value">${operation.calls[0].target}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Recoverer</span>
+                    <span class="detail-value address-value">${operation.executor}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Transaction Hash</span>
+                    <span class="detail-value address-value">${operation.transactionHash}</span>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// Create recovery generic display
+function createRecoveryGenericDisplay(operation) {
+    return `
+        <div class="operation-details transaction-display recovery-generic">
+            <div class="transaction-summary">
+                <div class="transaction-icon">🚨⚙️</div>
+                <div class="transaction-info">
+                    <div class="transaction-title">Recovery Operation</div>
+                    <div class="transaction-subtitle">Smart contract call</div>
+                </div>
+            </div>
+            
+            <div class="transaction-details">
+                <div class="detail-row">
+                    <span class="detail-label">Target</span>
+                    <span class="detail-value address-value">${operation.target}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Value (ETH)</span>
+                    <span class="detail-value">${ethers.utils.formatEther(operation.value)}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Recoverer</span>
+                    <span class="detail-value address-value">${operation.executor}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Transaction Hash</span>
+                    <span class="detail-value address-value">${operation.transactionHash}</span>
+                </div>
+            </div>
+        </div>
+    `;
 }
 
 // Analyze transaction type for better display
@@ -2656,28 +3009,66 @@ async function proposeTransaction() {
 
         showProposalStatus('Submitting transaction to blockchain...', 'pending');
 
-        // Call the schedule function
-        const tx = await contractWithSigner.schedule(
-            targetAddress,
-            valueWei,
-            data,
-            predecessor,
-            salt,
-            delay
-        );
-
-        showProposalStatus('Transaction submitted! Waiting for confirmation...', 'pending');
+        let tx;
+        
+        // Check if we're in recovery mode
+        if (window.isInRecoveryMode) {
+            // In recovery mode: use recoveryExecute for immediate execution
+            console.log('Recovery mode active - using recoveryExecute with parameters:', {
+                target: targetAddress,
+                value: valueWei.toString(),
+                data: data
+            });
+            
+            tx = await contractWithSigner.recoveryExecute(
+                targetAddress,
+                valueWei,
+                data
+            );
+            
+            showProposalStatus('Recovery execute submitted! Waiting for confirmation...', 'pending');
+        } else {
+            // Normal mode: use schedule for timelock delay
+            console.log('Normal mode - using schedule with parameters:', {
+                target: targetAddress,
+                value: valueWei.toString(),
+                data: data,
+                predecessor: predecessor,
+                salt: salt,
+                delay: delay
+            });
+            
+            tx = await contractWithSigner.schedule(
+                targetAddress,
+                valueWei,
+                data,
+                predecessor,
+                salt,
+                delay
+            );
+            
+            showProposalStatus('Transaction submitted! Waiting for confirmation...', 'pending');
+        }
 
         // Wait for transaction to be mined
         const receipt = await tx.wait();
 
-        showProposalStatus(
-            `Transaction proposed successfully! 
-            Transaction Hash: ${receipt.transactionHash}
-            Operation Hash: ${operationHash}
-            Ready for execution after delay period.`, 
-            'success'
-        );
+        if (window.isInRecoveryMode) {
+            showProposalStatus(
+                `Transaction executed immediately via recoveryExecute! 
+                Transaction Hash: ${receipt.transactionHash}
+                No delay required in recovery mode.`, 
+                'success'
+            );
+        } else {
+            showProposalStatus(
+                `Transaction proposed successfully! 
+                Transaction Hash: ${receipt.transactionHash}
+                Operation Hash: ${operationHash}
+                Ready for execution after delay period.`, 
+                'success'
+            );
+        }
 
         // Clear form
         document.getElementById('targetAddress').value = '';
@@ -2696,24 +3087,44 @@ async function proposeTransaction() {
             switchMainTab('operations');
         }, 1500);
 
-        console.log('Proposal successful:', {
-            txHash: receipt.transactionHash,
-            operationHash: operationHash,
-            target: targetAddress,
-            value: valueWei.toString(),
-            data: data,
-            salt: salt,
-            delay: delay
-        });
+        if (window.isInRecoveryMode) {
+            console.log('Recovery execute successful:', {
+                txHash: receipt.transactionHash,
+                target: targetAddress,
+                value: valueWei.toString(),
+                data: data,
+                mode: 'recovery (immediate execution)'
+            });
+        } else {
+            console.log('Proposal successful:', {
+                txHash: receipt.transactionHash,
+                operationHash: operationHash,
+                target: targetAddress,
+                value: valueWei.toString(),
+                data: data,
+                salt: salt,
+                delay: delay,
+                mode: 'normal (scheduled for later execution)'
+            });
+        }
 
     } catch (error) {
         console.error('Error proposing transaction:', error);
         
-        let errorMsg = 'Failed to propose transaction: ';
+        let errorMsg = window.isInRecoveryMode ? 
+            'Failed to execute transaction via recovery execute: ' : 
+            'Failed to propose transaction: ';
+            
         if (error.code === 4001) {
             errorMsg += 'Transaction rejected by user.';
-        } else if (error.message.includes('AccessControl')) {
-            errorMsg += 'You do not have the PROPOSER_ROLE required to propose transactions.';
+        } else if (error.message.includes('AccessControl') || error.message.includes('CallerIsNotRecoverer')) {
+            if (window.isInRecoveryMode) {
+                errorMsg += 'You do not have the RECOVERER_ROLE required for recovery execute.';
+            } else {
+                errorMsg += 'You do not have the PROPOSER_ROLE required to propose transactions.';
+            }
+        } else if (error.message.includes('NotInRecoveryMode')) {
+            errorMsg += 'Recovery execute requires recovery mode to be active.';
         } else if (error.message.includes('TimelockController: insufficient delay')) {
             errorMsg += 'The specified delay is less than the minimum required delay.';
         } else {
@@ -2826,6 +3237,7 @@ function resetEventData() {
     allExecutedEvents = [];
     allCancelledEvents = [];
     allSaltEvents = [];
+    allRecoveryExecutionEvents = [];
     lastEventsHash = null;
     lastOperationStatesHash = null;
     console.log('Event data and UI state reset. Next loadScheduledOperations() call will query from block 0 and rebuild UI.');
@@ -2838,13 +3250,15 @@ function generateEventsHash() {
     const executedIds = allExecutedEvents.map(e => e.args.id + e.blockNumber).sort();
     const cancelledIds = allCancelledEvents.map(e => e.args.id + e.blockNumber).sort();
     const saltIds = allSaltEvents.map(e => e.args.id + e.blockNumber).sort();
+    const recoveryIds = allRecoveryExecutionEvents.map(e => e.transactionHash + e.logIndex + e.blockNumber).sort();
     
     // Combine all into a single string and generate a simple hash
     const combined = JSON.stringify({
         scheduled: scheduledIds,
         executed: executedIds,
         cancelled: cancelledIds,
-        salt: saltIds
+        salt: saltIds,
+        recovery: recoveryIds
     });
     
     // Simple hash function

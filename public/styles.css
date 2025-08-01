@@ -133,17 +133,12 @@ h1 {
     display: block;
 }
 
-/* Three-column horizontal layout for info sections */
+/* Two-column horizontal layout for info sections */
 .info-sections-container {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: 1fr 1fr;
     gap: 20px;
     margin-bottom: 30px;
-}
-
-/* Recovery mode styling - two column layout */
-.info-sections-container.recovery-mode {
-    grid-template-columns: 1fr 1fr;
 }
 
 /* Recovery Panel section styling */
@@ -1218,6 +1213,43 @@ button {
     border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
+.status-recovery-executed {
+    background: linear-gradient(135deg, rgba(255, 107, 53, 0.2), rgba(247, 147, 30, 0.2));
+    color: #ff6b35;
+    border: 2px solid #ff6b35;
+    font-weight: bold;
+    box-shadow: 0 2px 4px rgba(255, 107, 53, 0.3);
+    animation: recoveryPulse 2s ease-in-out infinite;
+}
+
+@keyframes recoveryPulse {
+    0%, 100% { box-shadow: 0 2px 4px rgba(255, 107, 53, 0.3); }
+    50% { box-shadow: 0 4px 8px rgba(255, 107, 53, 0.5), 0 0 12px rgba(255, 107, 53, 0.2); }
+}
+
+/* Recovery operation specific styling */
+.recovery-operation {
+    border-left: 4px solid #ff6b35;
+    background: linear-gradient(135deg, rgba(255, 107, 53, 0.05), rgba(247, 147, 30, 0.05));
+}
+
+.recovery-note {
+    background: rgba(255, 107, 53, 0.15);
+    color: #ff6b35;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.9em;
+    font-weight: 600;
+    border: 1px solid rgba(255, 107, 53, 0.3);
+}
+
+.transaction-display.role-management,
+.transaction-display.recovery-eth-transfer,
+.transaction-display.recovery-token-transfer,
+.transaction-display.recovery-generic {
+    border-left: 3px solid #ff6b35;
+}
+
 .operation-details {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1548,6 +1580,84 @@ button[title]:not(.role-disabled):hover::before {
     color: var(--gray-600);
 }
 
+/* New UI Elements for Restructured Layout */
+.clickable-status {
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.clickable-status:hover {
+    background: rgba(56, 189, 248, 0.1);
+    border-radius: 6px;
+    transform: translateY(-1px);
+}
+
+.clickable-status:hover .status-value {
+    color: #38bdf8;
+}
+
+.transaction-mode-header {
+    margin-bottom: 20px;
+}
+
+.recovery-mode-indicator {
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 8px;
+    padding: 12px 16px;
+    color: #fca5a5;
+    font-weight: 600;
+    text-align: center;
+    font-size: 0.9em;
+}
+
+.recovery-control-section {
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.recovery-status-display {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    background: rgba(30, 41, 59, 0.6);
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.recovery-actions-section {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    align-items: center;
+}
+
+.recovery-explanation {
+    background: rgba(45, 55, 72, 0.6);
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.recovery-explanation h3 {
+    color: #38bdf8;
+    margin-top: 0;
+    margin-bottom: 15px;
+}
+
+.recovery-explanation p {
+    margin-bottom: 10px;
+    line-height: 1.5;
+}
+
+.recovery-explanation strong {
+    color: #fbbf24;
+}
+
 /* Responsive adjustments for transaction displays */
 @media (max-width: 768px) {
     .transaction-summary {
@@ -1573,5 +1683,9 @@ button[title]:not(.role-disabled):hover::before {
     
     .detail-value {
         text-align: left;
+    }
+    
+    .recovery-status-display {
+        grid-template-columns: 1fr;
     }
 }

@@ -22,15 +22,18 @@
                 <button class="toolbar-tab active" id="dashboardTab" onclick="switchMainTab('dashboard')">
                     Dashboard
                 </button>
-                <button class="toolbar-tab" id="createTransactionTab" onclick="switchMainTab('createTransaction')">
-                    Create Transaction
+                <button class="toolbar-tab" id="newTxnTab" onclick="switchMainTab('newTxn')">
+                    New Txn
                 </button>
                 <button class="toolbar-tab" id="operationsTab" onclick="switchMainTab('operations')">
                     Operations
                     <span class="pending-indicator" id="pendingIndicator" style="display: none;">pending</span>
                 </button>
-                <button class="toolbar-tab" id="recoveryPanelTab" onclick="switchMainTab('recoveryPanel')" style="display: none;">
-                    🚨 Recovery Panel
+                <button class="toolbar-tab" id="roleManagementTab" onclick="switchMainTab('roleManagement')">
+                    Role Management
+                </button>
+                <button class="toolbar-tab" id="recoveryToggleTab" onclick="switchMainTab('recoveryToggle')">
+                    Toggle Recovery Mode
                 </button>
             </div>
 
@@ -58,6 +61,10 @@
                             <div class="status-label">Recovery Epoch</div>
                             <div class="status-value" id="recoveryEpoch">-</div>
                         </div>
+                        <div class="status-item clickable-status" onclick="switchMainTab('operations')">
+                            <div class="status-label">Pending Operations</div>
+                            <div class="status-value" id="pendingOperationsCount">Loading...</div>
+                        </div>
                     </div>
                 </div>
                 
@@ -84,58 +91,20 @@
                         </div>
                     </div>
                 </div>
-                
-                <!-- Role Assignments Section -->
-                <div class="info-section" id="roleAssignmentsSection">
-                    <h2>Role Assignments</h2>
-                    <div class="roles-section">
-                        <div class="role-group">
-                            <div class="role-title">Proposers</div>
-                            <div class="loading" id="proposersLoading">Loading...</div>
-                            <ul class="address-list" id="proposersList" style="display: none;"></ul>
-                        </div>
-                        
-                        <div class="role-group">
-                            <div class="role-title">Executors</div>
-                            <div class="loading" id="executorsLoading">Loading...</div>
-                            <ul class="address-list" id="executorsList" style="display: none;"></ul>
-                        </div>
-                        
-                        <div class="role-group">
-                            <div class="role-title">Cancellers</div>
-                            <div class="loading" id="cancellersLoading">Loading...</div>
-                            <ul class="address-list" id="cancellersList" style="display: none;"></ul>
-                        </div>
-                        
-                        <div class="role-group">
-                            <div class="role-title">Recovery Triggerers</div>
-                            <div class="loading" id="recoveryTriggerersLoading">Loading...</div>
-                            <ul class="address-list" id="recoveryTriggerersList" style="display: none;"></ul>
-                        </div>
-                        
-                        <div class="role-group">
-                            <div class="role-title">Recoverers</div>
-                            <div class="loading" id="recoverersLoading">Loading...</div>
-                            <ul class="address-list" id="recoverersList" style="display: none;"></ul>
-                        </div>
-                    </div>
+            </div>
+            
+            <!-- Emergency Recovery Trigger Section - removed this will be in the new Recovery Toggle tab -->
+        </div> <!-- End Dashboard Section -->
+
+        <!-- New Txn Section -->
+        <div class="main-section" id="newTxnSection">
+            <div id="newTxnModeHeader" class="transaction-mode-header" style="display: none;">
+                <div class="recovery-mode-indicator">
+                    🚨 Recovery Mode: Transactions execute immediately via recoveryExecute
                 </div>
             </div>
             
-            <!-- Emergency Recovery Trigger Section -->
-            <div class="recovery-trigger-section">
-                <button id="triggerRecovery" class="recovery-trigger-button role-disabled" 
-                        title="Only Recovery Triggerers can activate recovery mode">
-                    🚨 TRIGGER RECOVERY MODE 🚨
-                    <div class="recovery-subtitle">Emergency protocol activation</div>
-                </button>
-            </div>
-        </div> <!-- End Dashboard Section -->
-
-        <!-- Create Transaction Section -->
-        <div class="main-section" id="createTransactionSection">
-            <div id="normalModeSection">
-                <h2>Create Transaction</h2>
+            <h2>Create Transaction</h2>
                 
                 <div class="transaction-tabs">
                     <button class="tab-button active" id="rawTransactionTab">Raw Transaction</button>
@@ -213,9 +182,7 @@
                 
                 <div id="proposalStatus" class="proposal-status" style="display: none;"></div>
             </div>
-            
-            </div> <!-- End normalModeSection -->
-        </div> <!-- End Create Transaction Section -->
+        </div> <!-- End New Txn Section -->
 
         <!-- Operations Section -->
         <div class="main-section" id="operationsSection">
@@ -224,6 +191,9 @@
             <div class="operations-section">
                 <div class="operations-header">
                     <button id="refreshOperations" class="refresh-button">Refresh Operations</button>
+                    <button id="cancelAllOperationsInRecovery" class="recovery-action-button cancel-all" style="display: none;" title="Cancel all pending operations (Recovery Mode only)">
+                        ❌ CANCEL ALL OPERATIONS
+                    </button>
                     <div class="operations-count">
                         <span id="operationsCount">Loading...</span>
                     </div>
@@ -237,37 +207,66 @@
             </div>
         </div> <!-- End Operations Section -->
 
-        <!-- Recovery Panel Section (only visible when in recovery mode) -->
-        <div class="main-section" id="recoveryPanelSection">
-            <div class="recovery-mode-header">
-                <h2>🚨 RECOVERY MODE ACTIVE</h2>
-                <p>All timelock delays are bypassed. Only recoverers can perform actions.</p>
-            </div>
+        <!-- Role Management Section -->
+        <div class="main-section" id="roleManagementSection">
+            <h2>Role Management</h2>
             
-            <div class="recovery-actions">
-                <button id="exitRecoveryMode" class="recovery-action-button exit-recovery" title="Exit recovery mode">
-                    🔒 EXIT RECOVERY MODE
-                </button>
-                <button id="cancelAllOperations" class="recovery-action-button cancel-all" title="Cancel all pending operations">
-                    ❌ CANCEL ALL OPERATIONS
-                </button>
+            <div id="roleManagementModeHeader" class="transaction-mode-header" style="display: none;">
+                <div class="recovery-mode-indicator">
+                    � Recovery Mode: Role changes execute immediately via recoveryExecute
+                </div>
             </div>
             
             <div class="recovery-roles-management">
-                <h3>Emergency Role Management</h3>
-                <div style="background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 15px; margin-bottom: 20px;">
-                    <div style="font-weight: 600; color: #38bdf8; margin-bottom: 8px;">🔧 Recovery Execute System</div>
+                <div id="roleManagementExplanation" style="background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+                    <div style="font-weight: 600; color: #38bdf8; margin-bottom: 8px;">🔧 Role Management System</div>
                     <div style="color: #e2e8f0; font-size: 0.9em; line-height: 1.4;">
-                        Role management during recovery uses <code>recoveryExecute</code> to call the vault's own <code>grantRole</code> and <code>revokeRole</code> functions. 
-                        This allows recoverers to manage permissions without special admin privileges.
+                        <span id="normalModeExplanation">View current role assignments. Role changes require recovery mode to be active.</span>
+                        <span id="recoveryModeExplanation" style="display: none;">Role management uses <code>recoveryExecute</code> to call the vault's own <code>grantRole</code> and <code>revokeRole</code> functions during recovery mode.</span>
                     </div>
                 </div>
-                <p>Grant or revoke roles during recovery to restore normal operations:</p>
                 <div id="recoveryRolesList" class="recovery-roles-list">
-                    <!-- Recovery role management will be populated by JavaScript -->
+                    <!-- Role management will be populated by JavaScript -->
                 </div>
             </div>
-        </div>
+        </div> <!-- End Role Management Section -->
+
+        <!-- Recovery Toggle Section -->
+        <div class="main-section" id="recoveryToggleSection">
+            <h2>Recovery Mode Control</h2>
+            
+            <div class="recovery-control-section">
+                <div class="recovery-status-display">
+                    <div class="status-item">
+                        <div class="status-label">Current Mode</div>
+                        <div class="status-value" id="recoveryModeStatus">-</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="status-label">Recovery Epoch</div>
+                        <div class="status-value" id="recoveryEpochStatus">-</div>
+                    </div>
+                </div>
+                
+                <div class="recovery-actions-section">
+                    <button id="triggerRecovery" class="recovery-trigger-button role-disabled" 
+                            title="Only Recovery Triggerers can activate recovery mode">
+                        🚨 TRIGGER RECOVERY MODE 🚨
+                        <div class="recovery-subtitle">Emergency protocol activation</div>
+                    </button>
+                    
+                    <button id="exitRecoveryMode" class="recovery-action-button exit-recovery" style="display: none;" title="Exit recovery mode">
+                        🔒 EXIT RECOVERY MODE
+                    </button>
+                </div>
+                
+                <div class="recovery-explanation">
+                    <h3>About Recovery Mode</h3>
+                    <p><strong>Normal Mode:</strong> All transactions must wait for the timelock delay before execution.</p>
+                    <p><strong>Recovery Mode:</strong> Emergency state where timelock delays are bypassed. Only recoverers can perform actions, and all operations execute immediately.</p>
+                    <p>Recovery mode is designed for emergency situations where immediate action is required to protect the vault.</p>
+                </div>
+            </div>
+        </div> <!-- End Recovery Toggle Section -->
 
     </div> <!-- End contract-info -->
         
