@@ -66,6 +66,7 @@ let allExecutedEvents = [];
 let allCancelledEvents = [];
 let allSaltEvents = [];
 let allRecoveryExecutionEvents = [];
+let allAllOperationsCancelledEvents = [];
 let lastEventsHash = null;
 let lastOperationStatesHash = null;
 
@@ -108,6 +109,9 @@ const recoveryTriggerButton = document.getElementById('triggerRecovery');
 // Check if wallet is available on page load
 async function checkWallet() {
     console.log('Checking wallet...', typeof window.ethereum);
+    
+    // Restore cached tab first
+    restoreCachedTab();
     
     if (typeof window.ethereum !== 'undefined') {
         console.log('MetaMask detected');
@@ -172,7 +176,13 @@ async function connectWallet() {
         console.log('userAddress', userAddress);
         console.log('accounts', accounts);
         
+        // Get current chain and update tokens
+        const network = await provider.getNetwork();
+        const chainId = network.chainId;
+        console.log('Connected to chain ID:', chainId);
         
+        // Update tokens for current chain
+        window.CONFIG.updateTokensForChain(chainId);
         
         contract = new ethers.Contract(window.CONFIG.CONTRACT_ADDRESS, window.CONFIG.CONTRACT_ABI, provider);
         
@@ -248,6 +258,7 @@ function disconnectWallet() {
     allCancelledEvents = [];
     allSaltEvents = [];
     allRecoveryExecutionEvents = [];
+    allAllOperationsCancelledEvents = [];
     lastEventsHash = null;
     lastOperationStatesHash = null;
     
@@ -393,6 +404,9 @@ function switchMainTab(tabType) {
         } else if (tabType === 'recoveryToggle') {
             targetTab = document.getElementById('recoveryToggleTab');
             targetSection = document.getElementById('recoveryToggleSection');
+        } else if (tabType === 'deploy') {
+            targetTab = document.getElementById('deployTab');
+            targetSection = document.getElementById('deploySection');
         }
         
         console.log('Target elements found:', !!targetTab, !!targetSection);
@@ -400,6 +414,10 @@ function switchMainTab(tabType) {
         if (targetTab && targetSection) {
             targetTab.classList.add('active');
             targetSection.classList.add('active');
+            
+            // Cache the current tab in localStorage
+            localStorage.setItem('currentTab', tabType);
+            
             console.log('Successfully switched to', tabType);
         } else {
             console.error('Could not find target elements for', tabType);
@@ -410,8 +428,135 @@ function switchMainTab(tabType) {
     }
 }
 
+// Restore cached tab on page load
+function restoreCachedTab() {
+    const cachedTab = localStorage.getItem('currentTab');
+    if (cachedTab) {
+        console.log('Restoring cached tab:', cachedTab);
+        switchMainTab(cachedTab);
+    } else {
+        // Default to dashboard if no cached tab
+        switchMainTab('dashboard');
+    }
+}
+
 // Make function available globally
 window.switchMainTab = switchMainTab;
+
+// Contract address editing functionality
+async function editContractAddress() {
+    const currentAddress = window.CONFIG.CONTRACT_ADDRESS;
+    const newAddress = prompt('Enter new contract address:', currentAddress);
+    
+    if (!newAddress || newAddress === currentAddress) {
+        return; // User cancelled or entered same address
+    }
+    
+    // Validate address format
+    if (!ethers.utils.isAddress(newAddress)) {
+        alert('Invalid address format. Please enter a valid Ethereum address.');
+        return;
+    }
+    
+    try {
+        // Show loading state
+        document.getElementById('contractAddress').textContent = 'Validating...';
+        
+        // Validate that this is a TimelockVault contract
+        if (!provider) {
+            alert('Please connect your wallet first to validate the contract.');
+            document.getElementById('contractAddress').textContent = currentAddress;
+            return;
+        }
+        
+        await validateTimelockVaultContract(newAddress);
+        
+        // If validation passes, update the config
+        window.CONFIG.CONTRACT_ADDRESS = newAddress;
+        document.getElementById('contractAddress').textContent = 'Updating...';
+        
+        // If connected, reconnect with new contract
+        if (contract) {
+            contract = new ethers.Contract(newAddress, window.CONFIG.CONTRACT_ABI, provider);
+            
+            // Reload all contract data
+            await loadContractData();
+            
+            // Update button states for new contract
+            await updateButtonStates();
+            
+            console.log('Successfully switched to new contract:', newAddress);
+        } else {
+            // Just update the display if not connected
+            document.getElementById('contractAddress').textContent = newAddress;
+        }
+        
+    } catch (error) {
+        console.error('Error switching contract address:', error);
+        
+        // Revert to old address
+        window.CONFIG.CONTRACT_ADDRESS = currentAddress;
+        document.getElementById('contractAddress').textContent = currentAddress;
+        
+        if (error.message.includes('TimelockVault validation')) {
+            alert(error.message);
+        } else {
+            alert('Failed to switch to new contract address. Please check that the address is a valid TimelockVault contract.');
+        }
+    }
+}
+
+// Validate that a contract address is a TimelockVault
+async function validateTimelockVaultContract(address) {
+    try {
+        // Create a test contract instance
+        const testContract = new ethers.Contract(address, window.CONFIG.CONTRACT_ABI, provider);
+        
+        // Test for TimelockController base functions
+        const timelockTests = [
+            testContract.getMinDelay(),
+            testContract.PROPOSER_ROLE(),
+            testContract.EXECUTOR_ROLE(),
+            testContract.CANCELLER_ROLE()
+        ];
+        
+        // Test for TimelockVault specific functions
+        const vaultTests = [
+            testContract.recoveryMode(),
+            testContract.currentRecoveryEpoch(),
+            testContract.RECOVERY_TRIGGER_ROLE(),
+            testContract.RECOVERER_ROLE()
+        ];
+        
+        // Run all tests in parallel with timeout
+        const allTests = [...timelockTests, ...vaultTests];
+        
+        await Promise.race([
+            Promise.all(allTests),
+            new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Contract validation timeout')), 10000)
+            )
+        ]);
+        
+        console.log('TimelockVault contract validation passed for:', address);
+        
+    } catch (error) {
+        console.error('TimelockVault validation failed:', error);
+        
+        if (error.message.includes('timeout')) {
+            throw new Error('TimelockVault validation failed: Contract validation timed out. The contract may not be responding.');
+        } else if (error.message.includes('CALL_EXCEPTION') || error.message.includes('does not exist')) {
+            throw new Error('TimelockVault validation failed: This address does not appear to be a TimelockVault contract. Missing required functions.');
+        } else if (error.message.includes('network')) {
+            throw new Error('TimelockVault validation failed: Network error while validating contract. Please try again.');
+        } else {
+            throw new Error(`TimelockVault validation failed: ${error.message}`);
+        }
+    }
+}
+
+// Make function available globally
+window.editContractAddress = editContractAddress;
 
 // Initialize token list
 function initializeTokenList() {
@@ -638,29 +783,36 @@ async function addNewToken() {
         
         const tokenInfo = await validateTokenContract(address);
         
-        // Add to SUPPORTED_TOKENS array
-        window.CONFIG.SUPPORTED_TOKENS.push({
+        // Get current chain ID
+        const chainId = provider ? parseInt(await provider.getNetwork().then(n => n.chainId)) : 31337;
+        
+        // Use the new multi-chain add function
+        const success = window.CONFIG.addTokenToCurrentChain(chainId, {
             name: tokenInfo.name,
             symbol: tokenInfo.symbol,
             address: tokenInfo.address,
             decimals: tokenInfo.decimals
         });
         
-        showAddTokenStatus(`✅ Added ${tokenInfo.symbol} (${tokenInfo.name}) successfully!`, 'success');
-        
-        // Clear input
-        addressInput.value = '';
-        
-        // Refresh token balances to show the new token
-        await loadTokenBalances();
-        
-        // Refresh token dropdown for token transfers
-        initializeTokenList();
-        
-        // Auto-hide success message after 3 seconds
-        setTimeout(() => {
-            hideAddTokenStatus();
-        }, 3000);
+        if (success) {
+            showAddTokenStatus(`✅ Added ${tokenInfo.symbol} (${tokenInfo.name}) to ${window.CONFIG.getCurrentChainInfo(chainId).shortName}!`, 'success');
+            
+            // Clear input
+            addressInput.value = '';
+            
+            // Refresh token balances to show the new token
+            await loadTokenBalances();
+            
+            // Refresh token dropdown for token transfers
+            initializeTokenList();
+            
+            // Auto-hide success message after 3 seconds
+            setTimeout(() => {
+                hideAddTokenStatus();
+            }, 3000);
+        } else {
+            showAddTokenStatus(`${tokenInfo.symbol} (${tokenInfo.name}) is already in the list for this chain`, 'error');
+        }
         
     } catch (error) {
         console.error('Error adding token:', error);
@@ -673,33 +825,40 @@ async function addNewToken() {
 }
 
 // Remove token functionality
-function removeToken(tokenIndex) {
-    if (tokenIndex < 3) {
-        showAddTokenStatus('Cannot remove built-in tokens', 'error');
-        return;
+async function removeToken(tokenIndex) {
+    try {
+        // Get current chain ID
+        const chainId = provider ? parseInt(await provider.getNetwork().then(n => n.chainId)) : 31337;
+        
+        const token = window.CONFIG.SUPPORTED_TOKENS[tokenIndex];
+        if (!token) return;
+        
+        const confirmed = confirm(`Remove ${token.symbol} (${token.name}) from the token list for ${window.CONFIG.getCurrentChainInfo(chainId).name}?`);
+        if (!confirmed) return;
+        
+        // Use the new multi-chain remove function
+        const removedToken = window.CONFIG.removeTokenFromCurrentChain(chainId, tokenIndex);
+        
+        if (removedToken) {
+            showAddTokenStatus(`Removed ${removedToken.symbol} from ${window.CONFIG.getCurrentChainInfo(chainId).shortName}`, 'success');
+            
+            // Refresh token balances
+            await loadTokenBalances();
+            
+            // Refresh token dropdown
+            initializeTokenList();
+            
+            // Auto-hide message
+            setTimeout(() => {
+                hideAddTokenStatus();
+            }, 2000);
+        } else {
+            showAddTokenStatus('Failed to remove token', 'error');
+        }
+    } catch (error) {
+        console.error('Error removing token:', error);
+        showAddTokenStatus('Error removing token', 'error');
     }
-    
-    const token = window.CONFIG.SUPPORTED_TOKENS[tokenIndex];
-    if (!token) return;
-    
-    const confirmed = confirm(`Remove ${token.symbol} (${token.name}) from the token list?`);
-    if (!confirmed) return;
-    
-    // Remove from array
-    window.CONFIG.SUPPORTED_TOKENS.splice(tokenIndex, 1);
-    
-    showAddTokenStatus(`Removed ${token.symbol} from the list`, 'success');
-    
-    // Refresh token balances
-    loadTokenBalances();
-    
-    // Refresh token dropdown
-    initializeTokenList();
-    
-    // Auto-hide message
-    setTimeout(() => {
-        hideAddTokenStatus();
-    }, 2000);
 }
 
 // Token transfer proposal
@@ -935,6 +1094,7 @@ async function handleRecoveryModeUI(isRecoveryMode) {
     window.isInRecoveryMode = isRecoveryMode;
     
     // Update mode indicators and explanations across all tabs
+    const recoveryModeIndicator = document.getElementById('recoveryModeIndicator');
     const newTxnModeHeader = document.getElementById('newTxnModeHeader');
     const roleManagementModeHeader = document.getElementById('roleManagementModeHeader');
     const normalModeExplanation = document.getElementById('normalModeExplanation');
@@ -945,7 +1105,14 @@ async function handleRecoveryModeUI(isRecoveryMode) {
     const triggerRecoveryButton = document.getElementById('triggerRecovery');
     const exitRecoveryButton = document.getElementById('exitRecoveryMode');
     
+    // Update transaction button text based on recovery mode
+    const proposeButton = document.getElementById('proposeTransaction');
+    const proposeTokenTransferButton = document.getElementById('proposeTokenTransfer');
+    
     if (isRecoveryMode) {
+        // Show global recovery mode indicator above navbar
+        if (recoveryModeIndicator) recoveryModeIndicator.style.display = 'block';
+        
         // Show recovery mode indicators
         if (newTxnModeHeader) newTxnModeHeader.style.display = 'block';
         if (roleManagementModeHeader) roleManagementModeHeader.style.display = 'block';
@@ -962,12 +1129,19 @@ async function handleRecoveryModeUI(isRecoveryMode) {
         if (triggerRecoveryButton) triggerRecoveryButton.style.display = 'none';
         if (exitRecoveryButton) exitRecoveryButton.style.display = 'block';
         
+        // Update button text to "Execute" in recovery mode
+        if (proposeButton) proposeButton.textContent = 'Execute Transaction';
+        if (proposeTokenTransferButton) proposeTokenTransferButton.textContent = 'Execute Token Transfer';
+        
         // Load recovery mode role management
         await loadRoleManagement();
         
         // Update recovery mode button states
         await updateRecoveryModeButtons();
     } else {
+        // Hide global recovery mode indicator above navbar
+        if (recoveryModeIndicator) recoveryModeIndicator.style.display = 'none';
+        
         // Hide recovery mode indicators
         if (newTxnModeHeader) newTxnModeHeader.style.display = 'none';
         if (roleManagementModeHeader) roleManagementModeHeader.style.display = 'none';
@@ -984,6 +1158,10 @@ async function handleRecoveryModeUI(isRecoveryMode) {
         if (triggerRecoveryButton) triggerRecoveryButton.style.display = 'block';
         if (exitRecoveryButton) exitRecoveryButton.style.display = 'none';
         
+        // Update button text to "Propose" in normal mode
+        if (proposeButton) proposeButton.textContent = 'Propose Transaction';
+        if (proposeTokenTransferButton) proposeTokenTransferButton.textContent = 'Propose Token Transfer';
+        
         // Clear role management UI (will show view-only in normal mode)
         await loadRoleManagement();
     }
@@ -993,6 +1171,15 @@ async function handleRecoveryModeUI(isRecoveryMode) {
         const recoveryEpoch = document.getElementById('recoveryEpoch');
         if (recoveryEpoch) {
             recoveryEpochStatus.textContent = recoveryEpoch.textContent;
+        } else {
+            // If recoveryEpoch element doesn't exist, get the value directly from contract
+            try {
+                const currentEpoch = await contract.currentRecoveryEpoch();
+                recoveryEpochStatus.textContent = currentEpoch.toString();
+            } catch (error) {
+                console.error('Error getting recovery epoch:', error);
+                recoveryEpochStatus.textContent = '-';
+            }
         }
     }
 }
@@ -1068,20 +1255,49 @@ async function loadRoleManagement() {
                         </button>
                     ` : ''}
                 </div>
+                ${roleInfo.roleFunction === 'RECOVERER_ROLE' && members.length === 1 ? `
+                    <div class="critical-role-warning">
+                        <div class="warning-header">
+                            ⚠️ Critical Role Protection
+                        </div>
+                        <div class="warning-description">
+                            This is the last recoverer. Revoking this role would make the contract unrecoverable and effectively kill it. Add additional recoverers before removing this one.
+                        </div>
+                    </div>
+                ` : ''}
                 <div class="recovery-role-members" id="recovery-${roleInfo.roleFunction}-members">
                     ${members.length === 0 ? 
-                        '<div style="color: #64748b; font-style: italic;">No members</div>' : 
-                        members.map(member => `
+                        '<div class="role-management-special-case">No members assigned</div>' : 
+                        // Special case for executor role with zero address
+                        (roleInfo.roleFunction === 'EXECUTOR_ROLE' && members.length === 1 && members[0] === '0x0000000000000000000000000000000000000000') ?
+                        `<div class="anyone-execute-notice">
+                            <div class="notice-header">
+                                🔓 Open Execution Mode
+                            </div>
+                            <div class="notice-description">
+                                The <span class="zero-address">${members[0]}</span> is assigned as executor, which means <strong>anyone can execute</strong> ready operations without needing specific executor permissions.
+                            </div>
+                        </div>` :
+                        members.map(member => {
+                            // Special protection for last recoverer
+                            const isLastRecoverer = roleInfo.roleFunction === 'RECOVERER_ROLE' && members.length === 1;
+                            const lastRecovererReason = 'Cannot revoke the last recoverer - this would make the contract unrecoverable and effectively kill it';
+                            
+                            return `
                             <div class="recovery-role-member">
                                 <span class="recovery-member-address">${member}</span>
                                 ${isInRecoveryMode ? `
-                                    <button class="revoke-role-button" onclick="revokeRoleFromMember('${roleInfo.roleFunction}', '${member}')"
-                                            ${!isRecoverer ? `disabled title="${disabledReason}"` : 'title="Uses recoveryExecute to revoke roles"'}>
+                                    <button class="revoke-role-button ${isLastRecoverer ? 'role-disabled' : ''}" 
+                                            onclick="${isLastRecoverer ? '' : `revokeRoleFromMember('${roleInfo.roleFunction}', '${member}')`}"
+                                            ${!isRecoverer ? `disabled title="${disabledReason}"` : 
+                                              isLastRecoverer ? `disabled title="${lastRecovererReason}"` : 
+                                              'title="Uses recoveryExecute to revoke roles"'}>
                                         Revoke
                                     </button>
                                 ` : ''}
                             </div>
-                        `).join('')
+                        `;
+                        }).join('')
                     }
                 </div>
                 ${isInRecoveryMode ? `
@@ -1119,7 +1335,11 @@ async function loadContractData() {
         document.getElementById('recoveryMode').textContent = recoveryMode ? 'Active' : 'Inactive';
             
         const recoveryEpoch = await contract.currentRecoveryEpoch();
-        document.getElementById('recoveryEpoch').textContent = recoveryEpoch.toString();
+        // Recovery epoch is only shown in the Recovery Toggle tab now
+        const recoveryEpochElement = document.getElementById('recoveryEpoch');
+        if (recoveryEpochElement) {
+            recoveryEpochElement.textContent = recoveryEpoch.toString();
+        }
         
         // Handle recovery mode UI switching
         await handleRecoveryModeUI(recoveryMode);
@@ -1209,14 +1429,13 @@ async function loadTokenBalances() {
         if (balances.length === 0) {
             tokenBalancesElement.textContent = 'No tokens';
         } else {
-            // Create individual token balance elements with remove option for dynamic tokens
+            // Create individual token balance elements with remove button for all tokens
             const tokenElements = balances.map(tokenData => {
-                const removeButton = tokenData.isDynamic ? 
-                    ` <button class="remove-token-button" onclick="removeToken(${tokenData.index})" title="Remove ${tokenData.symbol}">×</button>` : 
-                    '';
+                const removeButton = `<button class="remove-token-button" onclick="removeToken(${tokenData.index})">×</button>`;
                 
                 return `<div class="token-balance-item" title="${tokenData.name} (${tokenData.address})">
-                    <span class="token-balance">${tokenData.balance} ${tokenData.symbol}</span>${removeButton}
+                    <span class="token-balance">${tokenData.balance} ${tokenData.symbol}</span>
+                    ${removeButton}
                 </div>`;
             });
             
@@ -1394,9 +1613,16 @@ async function loadScheduledOperations() {
                 console.log('RecoveryExecution events:', newRecoveryExecutionEvents);
                 
                 allRecoveryExecutionEvents.push(...newRecoveryExecutionEvents);
-                console.warn(`Found new events: ${newScheduledEvents.length} scheduled, ${newExecutedEvents.length} executed, ${newCancelledEvents.length} cancelled, ${newSaltEvents.length} salt, ${newRecoveryExecutionEvents.length} recovery executions`);
+                
+                // Get new AllOperationsCancelled events
+                const allOperationsCancelledFilter = contract.filters.AllOperationsCancelled();
+                const newAllOperationsCancelledEvents = await contract.queryFilter(allOperationsCancelledFilter, fromBlock, currentBlock);
+                console.log('Raw AllOperationsCancelled events found:', newAllOperationsCancelledEvents.length);
+                allAllOperationsCancelledEvents.push(...newAllOperationsCancelledEvents);
+                
+                console.warn(`Found new events: ${newScheduledEvents.length} scheduled, ${newExecutedEvents.length} executed, ${newCancelledEvents.length} cancelled, ${newSaltEvents.length} salt, ${newRecoveryExecutionEvents.length} recovery executions, ${newAllOperationsCancelledEvents.length} all operations cancelled`);
             } catch (error) {
-                console.error('Error querying RecoveryExecution events:', error);
+                console.error('Error querying RecoveryExecution/AllOperationsCancelled events:', error);
             } 
             
         }
@@ -1543,7 +1769,43 @@ async function loadScheduledOperations() {
             });
         }
 
-        console.log(`Total operations including recovery: ${operations.length}`);
+        // Add AllOperationsCancelled events to the list
+        console.log(`Processing ${allAllOperationsCancelledEvents.length} all operations cancelled events`);
+        for (const cancelAllEvent of allAllOperationsCancelledEvents) {
+            // Create a unique ID for cancel all operations events
+            const cancelAllId = `cancel-all-${cancelAllEvent.transactionHash}-${cancelAllEvent.logIndex}`;
+            
+            console.log('Adding cancel all operations event:', {
+                id: cancelAllId,
+                newEpoch: cancelAllEvent.args.newEpoch.toString(),
+                canceller: cancelAllEvent.args.canceller,
+                transactionHash: cancelAllEvent.transactionHash
+            });
+            
+            operations.push({
+                id: cancelAllId,
+                target: 'System Operation',
+                value: '0',
+                data: '0x',
+                executor: cancelAllEvent.args.canceller,
+                calls: [{
+                    target: 'System Operation',
+                    value: '0',
+                    data: '0x'
+                }],
+                delay: 0,
+                salt: 'N/A (System)',
+                predecessor: 'N/A (System)',
+                newEpoch: cancelAllEvent.args.newEpoch.toString(),
+                transactionHash: cancelAllEvent.transactionHash,
+                blockNumber: cancelAllEvent.blockNumber,
+                status: 'All Operations Cancelled',
+                statusClass: 'status-all-cancelled',
+                type: 'cancel-all'
+            });
+        }
+
+        console.log(`Total operations including recovery and cancel-all: ${operations.length}`);
         
         // Sort by block number (newest first)
         operations.sort((a, b) => b.blockNumber - a.blockNumber);
@@ -1654,6 +1916,11 @@ function createOperationElement(operation) {
         return createRecoveryOperationElement(operation);
     }
     
+    // Handle cancel-all operations differently
+    if (operation.type === 'cancel-all') {
+        return createCancelAllOperationElement(operation);
+    }
+    
     // Calculate ready time
     const currentTime = Math.floor(Date.now() / 1000);
     const readyTime = currentTime + operation.delay;
@@ -1741,6 +2008,54 @@ function createRecoveryOperationElement(operation) {
             <div class="operation-status ${operation.statusClass}">${operation.status}</div>
         </div>
         ${operationDetails}
+    `;
+    
+    return div;
+}
+
+// Create cancel-all operation element
+function createCancelAllOperationElement(operation) {
+    const div = document.createElement('div');
+    div.className = 'operation-item cancel-all-operation';
+    
+    const timestamp = new Date(operation.blockNumber ? undefined : Date.now()).toLocaleString();
+    
+    div.innerHTML = `
+        <div class="operation-header">
+            <div class="operation-info">
+                <div class="operation-id">Cancel All ID: ${operation.id}</div>
+                <div class="operation-type">🛑 All Operations Cancelled</div>
+            </div>
+            <div class="operation-status ${operation.statusClass}">${operation.status}</div>
+        </div>
+        <div class="transaction-display">
+            <div class="transaction-info">
+                <div class="transaction-meta">
+                    <div class="field-group">
+                        <label>Cancelled By:</label>
+                        <span class="address-display">${formatAddress(operation.executor)}</span>
+                    </div>
+                    <div class="field-group">
+                        <label>New Recovery Epoch:</label>
+                        <span class="epoch-display">${operation.newEpoch}</span>
+                    </div>
+                    <div class="field-group">
+                        <label>Transaction Hash:</label>
+                        <span class="hash-display">${formatAddress(operation.transactionHash)}</span>
+                    </div>
+                </div>
+                <div class="impact-notice">
+                    <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 10px; border-radius: 4px; margin: 10px 0;">
+                        <div style="font-weight: bold; color: #856404; margin-bottom: 5px;">
+                            ⚠️ Global Operation Cancellation
+                        </div>
+                        <div style="color: #856404; font-size: 0.9em; line-height: 1.4;">
+                            All pending operations from previous recovery epochs have been cancelled. This action invalidated all scheduled operations that were waiting for execution.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     `;
     
     return div;
@@ -2333,9 +2648,11 @@ async function cancelAllOperations() {
     if (!confirmed) return;
 
     try {
-        const cancelButton = document.getElementById('cancelAllOperations');
-        cancelButton.disabled = true;
-        cancelButton.textContent = 'Cancelling All Operations...';
+        const cancelButton = document.getElementById('cancelAllOperationsInRecovery');
+        if (cancelButton) {
+            cancelButton.disabled = true;
+            cancelButton.textContent = 'Cancelling All Operations...';
+        }
 
         const signer = provider.getSigner();
         const contractWithSigner = contract.connect(signer);
@@ -2360,9 +2677,11 @@ async function cancelAllOperations() {
         
         showError(errorMsg);
     } finally {
-        const cancelButton = document.getElementById('cancelAllOperations');
-        cancelButton.disabled = false;
-        cancelButton.textContent = '❌ CANCEL ALL OPERATIONS';
+        const cancelButton = document.getElementById('cancelAllOperationsInRecovery');
+        if (cancelButton) {
+            cancelButton.disabled = false;
+            cancelButton.textContent = '❌ CANCEL ALL OPERATIONS';
+        }
     }
 }
 
@@ -2425,7 +2744,7 @@ async function grantRoleToAddress(roleFunction, roleName) {
         alert(`✅ ${roleName} role granted to ${formatAddress(address)} via recovery execute`);
         
         // Refresh the recovery role management UI
-        await loadRecoveryRoleManagement();
+        await loadRoleManagement();
         hideGrantRoleForm(roleFunction);
         
         // Update connection status in case the current user's roles changed
@@ -2485,7 +2804,7 @@ async function revokeRoleFromMember(roleFunction, memberAddress) {
         alert(`✅ Role revoked from ${formatAddress(memberAddress)} via recovery execute`);
         
         // Refresh the recovery role management UI
-        await loadRecoveryRoleManagement();
+        await loadRoleManagement();
         
         // Update connection status in case the current user's roles changed
         await updateConnectionStatus();
@@ -2804,6 +3123,7 @@ function resetEventData() {
     allCancelledEvents = [];
     allSaltEvents = [];
     allRecoveryExecutionEvents = [];
+    allAllOperationsCancelledEvents = [];
     lastEventsHash = null;
     lastOperationStatesHash = null;
     console.log('Event data and UI state reset. Next loadScheduledOperations() call will query from block 0 and rebuild UI.');
@@ -2817,6 +3137,7 @@ function generateEventsHash() {
     const cancelledIds = allCancelledEvents.map(e => e.args.id + e.blockNumber).sort();
     const saltIds = allSaltEvents.map(e => e.args.id + e.blockNumber).sort();
     const recoveryIds = allRecoveryExecutionEvents.map(e => e.transactionHash + e.logIndex + e.blockNumber).sort();
+    const cancelAllIds = allAllOperationsCancelledEvents.map(e => e.transactionHash + e.logIndex + e.blockNumber).sort();
     
     // Combine all into a single string and generate a simple hash
     const combined = JSON.stringify({
@@ -2824,7 +3145,8 @@ function generateEventsHash() {
         executed: executedIds,
         cancelled: cancelledIds,
         salt: saltIds,
-        recovery: recoveryIds
+        recovery: recoveryIds,
+        cancelAll: cancelAllIds
     });
     
     // Simple hash function

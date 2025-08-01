@@ -50,6 +50,9 @@ const CONTRACT_ABI = [
     "event Cancelled(bytes32 indexed id)",
     
     // TimelockVault recovery events
+    "event RecoveryModeTriggered(address indexed recoveryTriggerer, uint256 currentEpoch)",
+    "event RecoveryModeExited(address indexed recoverer, uint256 currentEpoch)",
+    "event AllOperationsCancelled(uint256 newEpoch, address indexed canceller)",
     "event RecoveryExecution(address indexed recoverer, address indexed target, uint256 value, bytes data)"
 ];
 
@@ -61,12 +64,119 @@ const ERC20_ABI = [
     "function name() view returns (string)"
 ];
 
-// Token list with deployed test tokens
-const SUPPORTED_TOKENS = [
-    // { name: "Dancoin", symbol: "DAN", address: "0xbdEd0D2bf404bdcBa897a74E6657f1f12e5C6fb6", decimals: 18 },
-    { name: "GoldToken", symbol: "GOLD", address: "0xA7918D253764E42d60C3ce2010a34d5a1e7C1398", decimals: 18 },
-    { name: "AnnoyingDecimals", symbol: "FU", address: "0x71a9d115E322467147391c4a71D85F8e1cA623EF", decimals: 6 }
-];
+// Token lists by chain ID
+const TOKENS_BY_CHAIN = {
+    // Ethereum Mainnet (Chain ID: 1)
+    1: [
+        { name: "USD Coin", symbol: "USDC", address: "0xA0b86a33E6441D435a3CdA2dB1cf4A25E23Fbc6A", decimals: 6 },
+        { name: "Wrapped Ether", symbol: "WETH", address: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", decimals: 18 },
+        { name: "Tether USD", symbol: "USDT", address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6 },
+        { name: "Dai Stablecoin", symbol: "DAI", address: "0x6B175474E89094C44Da98b954EedeAC495271d0F", decimals: 18 }
+    ],
+    
+    // Arbitrum One (Chain ID: 42161)
+    42161: [
+        { name: "USD Coin", symbol: "USDC", address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", decimals: 6 },
+        { name: "Wrapped Ether", symbol: "WETH", address: "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1", decimals: 18 },
+        { name: "Tether USD", symbol: "USDT", address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", decimals: 6 },
+        { name: "Arbitrum", symbol: "ARB", address: "0x912CE59144191C1204E64559FE8253a0e49E6548", decimals: 18 }
+    ],
+    
+    // Polygon (Chain ID: 137)
+    137: [
+        { name: "USD Coin", symbol: "USDC", address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", decimals: 6 },
+        { name: "Wrapped Ether", symbol: "WETH", address: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", decimals: 18 },
+        { name: "Wrapped Matic", symbol: "WMATIC", address: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", decimals: 18 },
+        { name: "Tether USD", symbol: "USDT", address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", decimals: 6 }
+    ],
+    
+    // Base (Chain ID: 8453)
+    8453: [
+        { name: "USD Coin", symbol: "USDC", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 },
+        { name: "Wrapped Ether", symbol: "WETH", address: "0x4200000000000000000000000000000000000006", decimals: 18 },
+        { name: "Dai Stablecoin", symbol: "DAI", address: "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb", decimals: 18 }
+    ],
+    
+    // Localhost/Hardhat (Chain ID: 31337) - Test tokens
+    31337: [
+        { name: "Dancoin", symbol: "DAN", address: "0xbdEd0D2lbf404bdcBa897a74E6657f1f12e5C6fb6", decimals: 18 },
+        { name: "GoldToken", symbol: "GOLD", address: "0xA7918D253764E42d60C3ce2010a34d5a1e7C1398", decimals: 18 },
+        { name: "AnnoyingDecimals", symbol: "FU", address: "0x71a9d115E322467147391c4a71D85F8e1cA623EF", decimals: 6 }
+    ],
+    
+    // Sepolia Testnet (Chain ID: 11155111) - Test tokens
+    11155111: [
+        { name: "Test USD Coin", symbol: "USDC", address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", decimals: 6 },
+        { name: "Test Wrapped Ether", symbol: "WETH", address: "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14", decimals: 18 }
+    ]
+};
+
+// Network information
+const NETWORK_INFO = {
+    1: { name: "Ethereum Mainnet", shortName: "Ethereum" },
+    42161: { name: "Arbitrum One", shortName: "Arbitrum" },
+    137: { name: "Polygon", shortName: "Polygon" },
+    8453: { name: "Base", shortName: "Base" },
+    31337: { name: "Localhost", shortName: "Localhost" },
+    11155111: { name: "Sepolia Testnet", shortName: "Sepolia" }
+};
+
+// Function to update tokens based on current chain
+function updateTokensForChain(chainId) {
+    const tokens = TOKENS_BY_CHAIN[chainId] || [];
+    SUPPORTED_TOKENS.length = 0; // Clear current array
+    SUPPORTED_TOKENS.push(...tokens); // Add new tokens
+    
+    console.log(`Updated tokens for chain ${chainId} (${NETWORK_INFO[chainId]?.name || 'Unknown'}):`, tokens.length, 'tokens');
+    return tokens;
+}
+
+// Function to get current chain info
+function getCurrentChainInfo(chainId) {
+    return NETWORK_INFO[chainId] || { name: `Unknown Chain (${chainId})`, shortName: `Chain ${chainId}` };
+}
+
+// Function to add token to current chain
+function addTokenToCurrentChain(chainId, tokenInfo) {
+    if (!TOKENS_BY_CHAIN[chainId]) {
+        TOKENS_BY_CHAIN[chainId] = [];
+    }
+    
+    // Check if token already exists
+    const existingToken = TOKENS_BY_CHAIN[chainId].find(token => 
+        token.address.toLowerCase() === tokenInfo.address.toLowerCase()
+    );
+    
+    if (existingToken) {
+        return false; // Token already exists
+    }
+    
+    // Add to chain-specific list
+    TOKENS_BY_CHAIN[chainId].push(tokenInfo);
+    
+    // Update current SUPPORTED_TOKENS if this is the current chain
+    updateTokensForChain(chainId);
+    
+    return true; // Successfully added
+}
+
+// Function to remove token from current chain
+function removeTokenFromCurrentChain(chainId, tokenIndex) {
+    if (!TOKENS_BY_CHAIN[chainId] || tokenIndex >= TOKENS_BY_CHAIN[chainId].length) {
+        return false;
+    }
+    
+    // Remove from chain-specific list
+    const removedToken = TOKENS_BY_CHAIN[chainId].splice(tokenIndex, 1)[0];
+    
+    // Update current SUPPORTED_TOKENS if this is the current chain
+    updateTokensForChain(chainId);
+    
+    return removedToken;
+}
+
+// Initialize SUPPORTED_TOKENS with default chain (localhost for development)
+let SUPPORTED_TOKENS = [...(TOKENS_BY_CHAIN[31337] || [])];
 
 // Role configuration for UI management
 const ROLES_CONFIG = [
@@ -113,9 +223,16 @@ window.CONFIG = {
     CONTRACT_ABI,
     ERC20_ABI,
     SUPPORTED_TOKENS,
+    TOKENS_BY_CHAIN,
+    NETWORK_INFO,
     ROLES_CONFIG,
     RECOVERY_ROLES_CONFIG,
-    UI_CONFIG
+    UI_CONFIG,
+    // Token management functions
+    updateTokensForChain,
+    getCurrentChainInfo,
+    addTokenToCurrentChain,
+    removeTokenFromCurrentChain
 };
 
 // Also make individual constants available for backward compatibility

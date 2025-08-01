@@ -14,9 +14,27 @@
             <div id="connectionStatus" class="connection-status">Not connected</div>
         </div>
         
+        <!-- Beta Warning Banner -->
+        <div class="beta-warning-banner">
+            <div class="beta-warning-content">
+                <span class="beta-icon">⚠️</span>
+                <span class="beta-text">BETA SOFTWARE</span>
+                <span class="beta-description">In Beta • Has not undergone 3rd party audits • Not recommended for mainnet usage</span>
+            </div>
+        </div>
+        
         <h1>TimelockVault Interface</h1>
         
         <div id="contract-info" style="display: none;">
+            <!-- Recovery Mode Indicator -->
+            <div id="recoveryModeIndicator" class="recovery-mode-indicator" style="display: none;">
+                <div class="recovery-indicator-content">
+                    <span class="recovery-icon">🚨</span>
+                    <span class="recovery-text">RECOVERY MODE ACTIVE</span>
+                    <span class="recovery-description">Immediate execution enabled • Role management available • Normal operations disabled</span>
+                </div>
+            </div>
+            
             <!-- Main Navigation Toolbar -->
             <div class="main-toolbar">
                 <button class="toolbar-tab active" id="dashboardTab" onclick="switchMainTab('dashboard')">
@@ -35,6 +53,9 @@
                 <button class="toolbar-tab" id="recoveryToggleTab" onclick="switchMainTab('recoveryToggle')">
                     Toggle Recovery Mode
                 </button>
+                <button class="toolbar-tab" id="deployTab" onclick="switchMainTab('deploy')">
+                    Deploy
+                </button>
             </div>
 
             <!-- Dashboard Section -->
@@ -47,7 +68,7 @@
                     <div class="status-info">
                         <div class="status-item">
                             <div class="status-label">Contract Address</div>
-                            <div class="status-value" id="contractAddress">-</div>
+                            <div class="status-value clickable-address" id="contractAddress" onclick="editContractAddress()" title="Click to change contract address">-</div>
                         </div>
                         <div class="status-item">
                             <div class="status-label">Min Delay</div>
@@ -56,10 +77,6 @@
                         <div class="status-item">
                             <div class="status-label">Recovery Mode</div>
                             <div class="status-value" id="recoveryMode">-</div>
-                        </div>
-                        <div class="status-item">
-                            <div class="status-label">Recovery Epoch</div>
-                            <div class="status-value" id="recoveryEpoch">-</div>
                         </div>
                         <div class="status-item clickable-status" onclick="switchMainTab('operations')">
                             <div class="status-label">Pending Operations</div>
@@ -268,6 +285,121 @@
             </div>
         </div> <!-- End Recovery Toggle Section -->
 
+        <!-- Deploy Section -->
+        <div class="main-section" id="deploySection">
+            <h2>Deploy New TimelockVault</h2>
+            
+            <div class="deploy-container">
+                <div class="deploy-explanation">
+                    <h3>Contract Deployment</h3>
+                    <p>Deploy a new TimelockVault contract with custom parameters. All roles can be configured during deployment.</p>
+                </div>
+                
+                <div class="deploy-form">
+                    <!-- Basic Parameters -->
+                    <div class="deploy-section">
+                        <h4>Basic Configuration</h4>
+                        
+                        <div class="form-group">
+                            <label for="minDelay">Minimum Delay:</label>
+                            <div class="time-input-container">
+                                <div class="time-input-group">
+                                    <input type="number" id="delayDays" placeholder="0" min="0" max="999" class="time-input" oninput="updateDelayFromTimeInputs()">
+                                    <label class="time-label">days</label>
+                                </div>
+                                <div class="time-input-group">
+                                    <input type="number" id="delayHours" placeholder="0" min="0" max="23" class="time-input" oninput="updateDelayFromTimeInputs()">
+                                    <label class="time-label">hours</label>
+                                </div>
+                                <div class="time-input-group">
+                                    <input type="number" id="delayMinutes" placeholder="0" min="0" max="59" class="time-input" oninput="updateDelayFromTimeInputs()">
+                                    <label class="time-label">minutes</label>
+                                </div>
+                                <div class="time-input-group">
+                                    <input type="number" id="delaySeconds" placeholder="0" min="0" max="59" class="time-input" oninput="updateDelayFromTimeInputs()">
+                                    <label class="time-label">seconds</label>
+                                </div>
+                            </div>
+                            <input type="hidden" id="minDelay" value="0">
+                            <div class="deploy-help">
+                                <span id="delayDisplay">Total delay: 0 seconds</span><br>
+                                Time operations must wait before execution
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Role Configuration -->
+                    <div class="deploy-section">
+                        <h4>Role Configuration</h4>
+                        
+                        <!-- Proposers -->
+                        <div class="role-config-group">
+                            <h5>Proposers (can schedule operations)</h5>
+                            <div class="role-input-group">
+                                <input type="text" id="newProposersAddress" placeholder="0x..." class="form-input">
+                                <button type="button" id="addProposersAddress" class="add-role-button">+ Add</button>
+                            </div>
+                            <div id="proposersList" class="role-list"></div>
+                        </div>
+                        
+                        <!-- Executors -->
+                        <div class="role-config-group">
+                            <h5>Executors (can execute ready operations)</h5>
+                            <div class="executor-special-config">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="anyoneCanExecute"> 
+                                    Anyone can execute (recommended for public access)
+                                </label>
+                            </div>
+                            <div class="role-input-group">
+                                <input type="text" id="newExecutorsAddress" placeholder="0x..." class="form-input">
+                                <button type="button" id="addExecutorsAddress" class="add-role-button">+ Add</button>
+                            </div>
+                            <div id="executorsList" class="role-list"></div>
+                        </div>
+                        
+                        <!-- Cancellers -->
+                        <div class="role-config-group">
+                            <h5>Cancellers (can cancel pending operations)</h5>
+                            <div class="role-input-group">
+                                <input type="text" id="newCancellersAddress" placeholder="0x..." class="form-input">
+                                <button type="button" id="addCancellersAddress" class="add-role-button">+ Add</button>
+                            </div>
+                            <div id="cancellersList" class="role-list"></div>
+                        </div>
+                        
+                        <!-- Recovery Triggerers -->
+                        <div class="role-config-group">
+                            <h5>Recovery Triggerers (can activate recovery mode)</h5>
+                            <div class="role-input-group">
+                                <input type="text" id="newRecoveryTriggerersAddress" placeholder="0x..." class="form-input">
+                                <button type="button" id="addRecoveryTriggerersAddress" class="add-role-button">+ Add</button>
+                            </div>
+                            <div id="recoveryTriggerersList" class="role-list"></div>
+                        </div>
+                        
+                        <!-- Recoverers -->
+                        <div class="role-config-group">
+                            <h5>Recoverers (can perform emergency actions)</h5>
+                            <div class="role-input-group">
+                                <input type="text" id="newRecoverersAddress" placeholder="0x..." class="form-input">
+                                <button type="button" id="addRecoverersAddress" class="add-role-button">+ Add</button>
+                            </div>
+                            <div id="recoverersList" class="role-list"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Deployment Action -->
+                    <div class="deploy-section">
+                        <button id="deployTimelockVault" class="deploy-button" disabled>
+                            Deploy TimelockVault
+                        </button>
+                        <div id="deploymentStatus" class="deployment-status" style="display: none;"></div>
+                    </div>
+                </div>
+            </div>
+        </div> <!-- End Deploy Section -->
+
     </div> <!-- End contract-info -->
         
         <div id="error-section" style="display: none;">
@@ -278,6 +410,7 @@
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <script src="js/config.js"></script>
     <script src="js/views.js"></script>
+    <script src="js/deploy.js"></script>
     <script src="js/script.js"></script>
 </body>
 </html>
