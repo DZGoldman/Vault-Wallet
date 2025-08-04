@@ -1,6 +1,12 @@
 # TimelockVault
 
-A timelock vault with recovery mode functionality, built on top of OpenZeppelin's TimelockController.
+Solidity / EVM implementation of Bitcoin vault functionality as descripted [here](https://maltemoeser.de/paper/covenants.pdf):
+
+A set of **proposers** (less secure / hot wallets) can initiate operations to be executed after some delay. 
+A set of **recovery triggerers** (less secure / hot wallets) can initiate "recovery mode", during which all operations are paused and a **recoverer** (max security, cold storage) has full control over the wallet.
+
+
+ Built on top of OpenZeppelin's TimelockController.
 
 ## Features
 
