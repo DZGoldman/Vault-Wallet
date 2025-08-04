@@ -59,6 +59,40 @@ let autoRefreshInterval = null;
 let balanceRefreshInterval = null;
 let isInRecoveryMode = false; // Track recovery mode status
 
+// LocalStorage key for contract address
+const CONTRACT_ADDRESS_STORAGE_KEY = 'timelock-vault-contract-address';
+
+// Load contract address from localStorage on startup
+function loadContractAddressFromStorage() {
+    const storedAddress = localStorage.getItem(CONTRACT_ADDRESS_STORAGE_KEY);
+    if (storedAddress && ethers.utils.isAddress(storedAddress)) {
+        window.CONFIG.CONTRACT_ADDRESS = storedAddress;
+        console.log('Loaded contract address from localStorage:', storedAddress);
+    }
+}
+
+// Save contract address to localStorage
+function saveContractAddressToStorage(address) {
+    if (address && ethers.utils.isAddress(address)) {
+        localStorage.setItem(CONTRACT_ADDRESS_STORAGE_KEY, address);
+        console.log('Saved contract address to localStorage:', address);
+    }
+}
+
+// Update contract address display based on current state
+function updateContractAddressDisplay() {
+    const contractAddressElement = document.getElementById('contractAddress');
+    if (window.CONFIG.CONTRACT_ADDRESS) {
+        contractAddressElement.textContent = window.CONFIG.CONTRACT_ADDRESS;
+        contractAddressElement.className = 'status-value clickable-address';
+        contractAddressElement.title = 'Click to change contract address';
+    } else {
+        contractAddressElement.textContent = 'Click to set contract address';
+        contractAddressElement.className = 'status-value clickable-address empty-state';
+        contractAddressElement.title = 'Click to set the TimelockVault contract address';
+    }
+}
+
 // Persistent event data for efficient incremental loading
 let lastQueriedBlock = 0;
 let allScheduledEvents = [];
@@ -183,6 +217,22 @@ async function connectWallet() {
         
         // Update tokens for current chain
         window.CONFIG.updateTokensForChain(chainId);
+        
+        // Check if contract address is set
+        if (!window.CONFIG.CONTRACT_ADDRESS) {
+            console.log('No contract address set, showing contract info section but not creating contract instance');
+            connectionStatus.classList.remove('loading');
+            await updateConnectionStatus();
+            connectButton.style.display = 'none';
+            disconnectButton.style.display = 'inline-block';
+            
+            contractInfo.style.display = 'block';
+            updateContractAddressDisplay(); // Show the empty state
+            
+            // Update button states (will be disabled due to no contract)
+            await updateButtonStates();
+            return;
+        }
         
         contract = new ethers.Contract(window.CONFIG.CONTRACT_ADDRESS, window.CONFIG.CONTRACT_ABI, provider);
         
@@ -446,7 +496,12 @@ window.switchMainTab = switchMainTab;
 // Contract address editing functionality
 async function editContractAddress() {
     const currentAddress = window.CONFIG.CONTRACT_ADDRESS;
-    const newAddress = prompt('Enter new contract address:', currentAddress);
+    const promptMessage = currentAddress ? 
+        'Enter new contract address:' : 
+        'Enter TimelockVault contract address:';
+    const defaultValue = currentAddress || '';
+    
+    const newAddress = prompt(promptMessage, defaultValue);
     
     if (!newAddress || newAddress === currentAddress) {
         return; // User cancelled or entered same address
@@ -471,8 +526,9 @@ async function editContractAddress() {
         
         await validateTimelockVaultContract(newAddress);
         
-        // If validation passes, update the config
+        // If validation passes, update the config and save to localStorage
         window.CONFIG.CONTRACT_ADDRESS = newAddress;
+        saveContractAddressToStorage(newAddress);
         document.getElementById('contractAddress').textContent = 'Updating...';
         
         // If connected, reconnect with new contract
@@ -1324,6 +1380,13 @@ async function loadRoleManagement() {
 async function loadContractData() {
     
     try {
+        // Check if contract address is empty
+        if (!window.CONFIG.CONTRACT_ADDRESS) {
+            console.log('No contract address configured');
+            updateContractAddressDisplay(); // This will show the "Not configured" state
+            return;
+        }
+        
         // Load contract basic info
         document.getElementById('contractAddress').textContent = window.CONFIG.CONTRACT_ADDRESS;
 
@@ -3038,6 +3101,11 @@ window.addEventListener('load', async () => {
 // Also check when DOM is ready (in case MetaMask loads after window.load)
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('DOM loaded, checking wallet...');
+    
+    // Load contract address from localStorage and update display
+    loadContractAddressFromStorage();
+    updateContractAddressDisplay();
+    
     initializeTokenList(); // Initialize token dropdown
     // Add a delay to ensure MetaMask has time to inject itself
     setTimeout(async () => {

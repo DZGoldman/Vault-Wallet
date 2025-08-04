@@ -1,7 +1,7 @@
 // config.js - Configuration constants and settings
 
-// Contract configuration - update these after deployment
-const CONTRACT_ADDRESS = '0x5FbDB2315678afecb367f032d93F642f64180aa3'; // Update with your deployed contract address
+// Contract configuration - starts empty, user will set via UI
+const CONTRACT_ADDRESS = ''; // Will be loaded from localStorage or set by user
 
 const CONTRACT_ABI = [
     // TimelockController functions we need
