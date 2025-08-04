@@ -99,7 +99,7 @@ const TOKENS_BY_CHAIN = {
     
     // Localhost/Hardhat (Chain ID: 31337) - Test tokens
     31337: [
-        { name: "Dancoin", symbol: "DAN", address: "0xbdEd0D2lbf404bdcBa897a74E6657f1f12e5C6fb6", decimals: 18 },
+        { name: "Dancoin", symbol: "DAN", address: "0xbdEd0D2bf404bdcBa897a74E6657f1f12e5C6fb6", decimals: 18 },
         { name: "GoldToken", symbol: "GOLD", address: "0xA7918D253764E42d60C3ce2010a34d5a1e7C1398", decimals: 18 },
         { name: "AnnoyingDecimals", symbol: "FU", address: "0x71a9d115E322467147391c4a71D85F8e1cA623EF", decimals: 6 }
     ],

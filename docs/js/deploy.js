@@ -24,6 +24,9 @@ function initializeDeploymentTab() {
     // Initialize time inputs with default values
     initializeTimeInputs();
     
+    // Update deployment button state based on initial conditions
+    updateDeploymentButtonState();
+    
     console.log('Deployment tab initialized');
 }
 
@@ -160,6 +163,9 @@ function setupRoleListManagement() {
     const anyoneExecuteCheckbox = document.getElementById('anyoneCanExecute');
     if (anyoneExecuteCheckbox) {
         anyoneExecuteCheckbox.addEventListener('change', handleAnyoneCanExecuteChange);
+        
+        // Initialize the executor list state based on checkbox default value
+        handleAnyoneCanExecuteChange();
     }
 }
 
@@ -181,6 +187,9 @@ function handleAnyoneCanExecuteChange() {
         addExecutorButton.disabled = false;
         executorsList.innerHTML = '';
     }
+    
+    // Update deployment button state
+    updateDeploymentButtonState();
 }
 
 // Add address to role list
@@ -234,8 +243,43 @@ function updateDeploymentButtonState() {
     
     if (!deployButton) return;
     
-    const canDeploy = minDelay && parseInt(minDelay) > 0 && !deploymentInProgress;
+    // Check minimum delay
+    const validMinDelay = minDelay && parseInt(minDelay) > 0;
+    
+    // Check required roles
+    const proposers = collectRoleAddresses('proposersList');
+    const recoveryTriggerers = collectRoleAddresses('recoveryTriggerersList');
+    const recoverers = collectRoleAddresses('recoverersList');
+    
+    // Check executors (either "anyone can execute" is checked OR there's at least one executor)
+    const anyoneCanExecute = document.getElementById('anyoneCanExecute').checked;
+    const executors = collectRoleAddresses('executorsList');
+    const hasValidExecutors = anyoneCanExecute || executors.length > 0;
+    
+    const hasProposers = proposers.length > 0;
+    const hasRecoveryTriggerers = recoveryTriggerers.length > 0;
+    const hasRecoverers = recoverers.length > 0;
+    
+    const canDeploy = validMinDelay && hasProposers && hasValidExecutors && hasRecoveryTriggerers && hasRecoverers && !deploymentInProgress;
+    
     deployButton.disabled = !canDeploy;
+    
+    // Update button text to show what's missing
+    if (!validMinDelay) {
+        deployButton.textContent = 'Set minimum delay to deploy';
+    } else if (!hasProposers) {
+        deployButton.textContent = 'Add at least 1 proposer to deploy';
+    } else if (!hasValidExecutors) {
+        deployButton.textContent = 'Check "anyone can execute" or add executor addresses';
+    } else if (!hasRecoveryTriggerers) {
+        deployButton.textContent = 'Add at least 1 recovery triggerer to deploy';
+    } else if (!hasRecoverers) {
+        deployButton.textContent = 'Add at least 1 recoverer to deploy';
+    } else if (deploymentInProgress) {
+        deployButton.textContent = 'Deploying...';
+    } else {
+        deployButton.textContent = 'Deploy TimelockVault';
+    }
 }
 
 // Collect deployment parameters
@@ -302,6 +346,24 @@ async function deployTimelockVault() {
             throw new Error('Minimum delay must be greater than 0');
         }
         
+        if (params.proposers.length === 0) {
+            throw new Error('At least one proposer address is required');
+        }
+        
+        // Check executors: either anyone can execute (zero address) or at least one executor
+        const anyoneCanExecute = params.executors.length === 1 && params.executors[0] === '0x0000000000000000000000000000000000000000';
+        if (!anyoneCanExecute && params.executors.length === 0) {
+            throw new Error('Either check "anyone can execute" or provide at least one executor address');
+        }
+        
+        if (params.recoveryTriggerers.length === 0) {
+            throw new Error('At least one recovery triggerer address is required');
+        }
+        
+        if (params.recoverers.length === 0) {
+            throw new Error('At least one recoverer address is required');
+        }
+        
         showDeploymentStatus('Preparing contract deployment...', 'pending');
         
         // Deploy the actual contract
@@ -340,7 +402,7 @@ async function deployTimelockVaultContract(params) {
             params.recoveryTriggerers,
             params.recoverers,
             {
-                gasLimit: 3000000 // Set reasonable gas limit
+                gasLimit: 6000000 // Set reasonable gas limit
             }
         );
         
